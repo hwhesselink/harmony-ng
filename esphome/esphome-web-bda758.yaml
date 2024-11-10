@@ -1,0 +1,160 @@
+substitutions:
+  name: esphome-web-bda758
+  friendly_name: Kincony bda758
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2024.6.0
+  name_add_mac_suffix: false
+  project:
+    name: esphome.web
+    version: dev
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API
+api:
+  actions:
+    - action: pana_vup
+      then:
+        - remote_transmitter.transmit_panasonic:
+            address: 0x2A4C
+            command: 0x0280E86A
+        - delay: !lambda "return 1;"
+        - remote_transmitter.transmit_panasonic:
+            address: 0x2A4C
+            command: 0x0280E86A
+    - action: pana_pwr
+      then:
+        - remote_transmitter.transmit_panasonic:
+            address: 0x4004
+            command: 0x0d00bcb1
+    - action: tx_panasonic
+      variables:
+        address: int
+        command: int
+      then:
+        - remote_transmitter.transmit_panasonic:
+            address: !lambda 'return address;'
+            command: !lambda 'return command;'
+    - action: tx_panasonic_x2
+      variables:
+        address: int
+        command: int
+      then:
+        - remote_transmitter.transmit_panasonic:
+            address: !lambda 'return address;'
+            command: !lambda 'return command;'
+        - delay: !lambda "return 1;"
+        - remote_transmitter.transmit_panasonic:
+            address: !lambda 'return address;'
+            command: !lambda 'return command;'
+
+
+# Allow Over-The-Air updates
+ota:
+- platform: esphome
+
+#improv_serial:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+#  use_address: 10.12.3.168
+#  use_address: 10.12.2.42
+#  ssid: !secret wifi_ssid_cfb
+#  password: !secret wifi_password_cfb
+#  ssid: !secret wifi_ssid_lpb
+#  password: !secret wifi_password_lpb
+#  manual_ip:
+#    static_ip: 10.12.1.30
+#    gateway: 10.12.1.1
+#    subnet: 255.255.255.0
+  # Set up a wifi access point
+  ap: {}
+
+#captive_portal:
+
+#dashboard_import:
+#  package_import_url: github://esphome/example-configs/esphome-web/esp32.yaml@main
+#  import_full_config: true
+
+# Sets up Bluetooth LE (Only on ESP32) to allow the user
+# to provision wifi credentials to the device.
+#esp32_improv:
+#  authorizer: none
+
+# To have a "next url" for improv serial
+web_server:
+
+#debug:
+
+#text_sensor:
+#  - platform: debug
+#    device:
+#      name: "Device Info"
+#    reset_reason:
+#      name: "Reset Reason"
+
+sensor:
+  - platform: wifi_signal
+    name: "${friendly_name} Wifi Signal Strength"
+    update_interval: 60s
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+
+remote_transmitter:
+  - id: transmitter_ir
+    pin: GPIO2
+    carrier_duty_percent: 50%
+
+button:
+  # Restart the ESP
+  - platform: restart
+    name: "${friendly_name} reboot"
+  - platform: template
+    name: "Denon PAUP"
+    id: denon_paup
+    on_press:
+      - remote_transmitter.transmit_panasonic:
+          address: 0x2A4C
+          command: 0x0280E86A
+  - platform: template
+    name: "Denon PAUP 2x"
+    id: denon_paup2x
+    on_press:
+      - remote_transmitter.transmit_panasonic:
+          address: 0x2A4C
+          command: 0x0280E86A
+      - delay: !lambda "return 1;"
+      - remote_transmitter.transmit_panasonic:
+          address: 0x2A4C
+          command: 0x0280E86A
+  - platform: template
+    name: "Denon PADN"
+    id: denon_padn
+    on_press:
+      - remote_transmitter.transmit_panasonic:
+          address: 0x2A4C
+          command: 0x0288E862
+  - platform: template
+    name: "Panasonic Power"
+    id: pan_pwr
+    on_press:
+      - remote_transmitter.transmit_panasonic:
+          address: 0x4004
+          command: 0x0d00bcb1
+
+packages:
+#  pana_dvd: !include common/pana_dvd.yaml
+  volume: !include common/volume.yaml
+#  remote_rcvr_ir: !include common/remote_rcvr_ir.yaml
+  remote_rcvr_rf: !include common/remote_rcvr_rf.yaml

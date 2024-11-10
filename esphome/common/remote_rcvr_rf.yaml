@@ -1,0 +1,62 @@
+remote_receiver:
+# WORKS - RF
+#    pin:
+#      number: GPIO13
+#      inverted: False
+##    tolerance: 40%
+##    tolerance: 35%
+#    tolerance: DEFAULT
+#    filter: 250us
+#    idle: DEFAULT
+#    buffer_size: DEFAULT
+  - id: receiver_rf
+    pin:
+      number: GPIO13
+    filter: 250us
+#    memory_blocks: 8
+    dump:
+    - abbwelcome
+    - aeha
+    - byronsx
+    - canalsat
+    - canalsatld
+    - coolix
+    - dish
+    - dooya
+    - drayton
+    - jvc
+    - keeloq
+    - haier
+    - lg
+    - magiquest
+    - midea
+    - nec
+    - nexa
+    - panasonic
+    - pioneer
+#    - pronto
+#    - raw
+    - rc5
+    - rc6
+    - rc_switch
+    - roomba
+    - samsung
+    - samsung36
+    - sony
+    - toshiba_ac
+    - mirage
+    on_rc6:
+      then:
+        - if:
+            condition:
+              lambda: "return !(x.address == 0 && (x.command == 0x10 || x.command == 0x11));"
+#              lambda: "return 1;"
+            then:
+              - homeassistant.event:
+                  event: esphome.receiver_rf
+                  data_template:
+                    rcv: "RF - RC6"
+                    address: !lambda "return x.address;"
+                    command: !lambda "return x.command;"
+                    mode: !lambda "return x.mode;"
+                    toggle: !lambda "return x.toggle;"
