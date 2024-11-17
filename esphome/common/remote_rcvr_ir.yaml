@@ -20,43 +20,44 @@ remote_receiver:
 #    buffer_size: 2kb
 #    dump: all
     dump:
-#    - abbwelcome
-#    - aeha
-#    - byronsx
-#    - canalsat
-#    - canalsatld
-#    - coolix
-#   - dish
-#    - dooya
-#    - drayton
-#   - jvc
-#    - keeloq
-#   - haier
-#   - lg
-#    - magiquest
-#    - midea
-#    - nec
-#    - nexa
+    - abbwelcome
+    - aeha
+    - byronsx
+    - canalsat
+    - canalsatld
+    - coolix
+    - dish
+    - dooya
+    - drayton
+    - jvc
+    - keeloq
+    - haier
+    - lg
+    - magiquest
+    - midea
+    - nec
+    - nexa
     - panasonic
-#    - pioneer
+    - pioneer
 #    - pronto
 #    - raw
-#    - rc5
+    - rc5
     - rc6
-#    - rc_switch
-#    - roomba
-#    - samsung
-#    - samsung36
+    - rc_switch
+    - roomba
+    - samsung
+    - samsung36
     - sony
-#    - toshiba_ac
-#   - mirage
-#    on_sony:
-#      then:
-#      - homeassistant.event:
-#          event: esphome.receiver_ir
-#          data_template: 
-#            rcv: "IR - SONY"
-#            value: !lambda "return x.data;"
+    - toshiba_ac
+    - mirage
+    on_sony:
+      then:
+      - homeassistant.event:
+          event: esphome.receiver_ir
+          data_template: 
+            rcv: "IR - SONY"
+            data: !lambda "return x.data;"
+            nbits: !lambda "return x.nbits;"
 #    on_panasonic:
 #      then:
 #      - homeassistant.event:
