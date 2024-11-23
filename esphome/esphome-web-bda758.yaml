@@ -154,7 +154,6 @@ button:
           command: 0x0d00bcb1
 
 packages:
-#  pana_dvd: !include common/pana_dvd.yaml
   volume: !include common/volume.yaml
 #  remote_rcvr_ir: !include common/remote_rcvr_ir.yaml
   remote_rcvr_rf: !include common/remote_rcvr_rf.yaml
