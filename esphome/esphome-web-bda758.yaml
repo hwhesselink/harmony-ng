@@ -57,6 +57,75 @@ api:
         - remote_transmitter.transmit_panasonic:
             address: !lambda 'return address;'
             command: !lambda 'return command;'
+    - action: tx_pronto
+      variables:
+        data: string
+      then:
+        - remote_transmitter.transmit_pronto:
+            data: !lambda 'return data;'
+    - action: tx_pronto_up
+      then:
+        - remote_transmitter.transmit_pronto:
+            data: '0000 0048 0000 0018 00C0 00C0 0030 0090 0030 0090 0030 0030 0030 0090 0030 0090 0030 0030 0030 0090 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0090 0030 0030 0030 0030 0030 0090 0030 0030 0030 0090 0030 0090 0030 0090 0030 0090 0030 09E6'
+    - action: tx_sony
+      variables:
+        data: int
+        nbits: int
+        wait: int
+      then:
+        - repeat:
+            count: 3
+            then:
+              - remote_transmitter.transmit_sony:
+                  data: !lambda 'return data;'
+                  nbits: !lambda 'return nbits;'
+              - delay: !lambda "return wait;"
+    - action: tx_lg
+      variables:
+        data: int
+        nbits: int
+        repeat: int
+        wait: int
+      then:
+        - repeat:
+            count: !lambda 'return repeat;'
+            then:
+              - remote_transmitter.transmit_lg:
+                  data: !lambda 'return data;'
+                  nbits: !lambda 'return nbits;'
+              - delay: !lambda "return wait;"
+    - action: tx_nec2
+      variables:
+        address: int
+        command: int
+        cmdreps: int
+        repeat: int
+        wait: int
+      then:
+        - repeat:
+            count: !lambda 'return repeat;'
+            then:
+              - remote_transmitter.transmit_nec:
+                  address: !lambda 'return address;'
+                  command: !lambda 'return command;'
+                  command_repeats: !lambda 'return cmdreps;'
+              - delay: !lambda "return wait;"
+    - action: tx_nec
+      variables:
+        command: int
+      then:
+         - remote_transmitter.transmit_nec:
+              address: 0xBF40
+              command: !lambda 'return command;'
+    - action: tx_necrep
+      variables:
+        command: int
+        wait: int
+      then:
+          - remote_transmitter.transmit_nec:
+              address: 0xBF40
+              command: !lambda 'return command;'
+          - delay: !lambda "return wait;"
 
 
 # Allow Over-The-Air updates
