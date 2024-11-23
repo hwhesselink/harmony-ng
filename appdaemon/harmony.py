@@ -7,7 +7,9 @@ from remotes.urc3680 import urc3680_rc6_keys
 
 from devices.apple_tv_4k import sony_cmds_for_atv
 from devices.cisco_stb_8742 import cisco_stb_8742_cmds
+from devices.denon_avr_s760 import denon_avr_s760_cmds
 from devices.panasonic_dvd_s700 import panasonic_dvd_s700_cmds
+from devices.vizio_tv_m656g4 import vizio_tv_m656g4_cmds
 
 LOG_LEVEL = "INFO"
 
@@ -44,6 +46,22 @@ class Device(object):
         svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, self.proto)
         ad.call_service(svc, **kwargs)
 
+class Vizio_TV_M656G4(Device):
+    def __init__(self, name, instance=0):
+        self.proto = 'nec'
+        self.commands = vizio_tv_m656g4_cmds
+        self.name = name
+        self.instance = instance
+
+    def send_cmd(self, ad, repcnt, key):
+        cmd = self.commands.get(key)
+        if not cmd:
+            return
+        name, command = cmd
+        self.tx_cmd(ad, address=0xFB04, command=command)
+
+r.add_device(1, Vizio_TV_M656G4('Vizio TV'))
+
 class Apple_TV_4K(Device):
     def __init__(self, name, instance=0):
         self.proto = 'sony'
@@ -79,6 +97,22 @@ class Cisco_STB_8742(Device):
         self.tx_cmd(ad, data=data)
 
 r.add_device(3, Cisco_STB_8742('Set Top Box'))
+
+class Denon_AVR_S760(Device):
+    def __init__(self, name, instance=0):
+        self.proto = 'pronto'
+        self.commands = denon_avr_s760_cmds
+        self.name = name
+        self.instance = instance
+
+    def send_cmd(self, ad, repcnt, key):
+        cmd = self.commands.get(key)
+        if not cmd:
+            return
+        name, data = cmd
+        self.tx_cmd(ad, data=data)
+
+r.add_device(5, Denon_AVR_S760('Receiver'))
 
 class Panasonic_DVD_S700(Device):
     def __init__(self, name, instance=0):
