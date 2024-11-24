@@ -190,37 +190,19 @@ button:
   - platform: restart
     name: "${friendly_name} reboot"
   - platform: template
-    name: "Denon PAUP"
-    id: denon_paup
+    name: "Denon Vol UP"
+    id: denon_vol_up
     on_press:
       - remote_transmitter.transmit_panasonic:
           address: 0x2A4C
           command: 0x0280E86A
   - platform: template
-    name: "Denon PAUP 2x"
-    id: denon_paup2x
-    on_press:
-      - remote_transmitter.transmit_panasonic:
-          address: 0x2A4C
-          command: 0x0280E86A
-      - delay: !lambda "return 1;"
-      - remote_transmitter.transmit_panasonic:
-          address: 0x2A4C
-          command: 0x0280E86A
-  - platform: template
-    name: "Denon PADN"
-    id: denon_padn
+    name: "Denon Vol DOWN"
+    id: denon_vol_down
     on_press:
       - remote_transmitter.transmit_panasonic:
           address: 0x2A4C
           command: 0x0288E862
-  - platform: template
-    name: "Panasonic Power"
-    id: pan_pwr
-    on_press:
-      - remote_transmitter.transmit_panasonic:
-          address: 0x4004
-          command: 0x0d00bcb1
 
 packages:
   volume: !include common/volume.yaml

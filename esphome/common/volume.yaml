@@ -7,9 +7,9 @@ binary_sensor:
       address: 1
       command: 0x10
     on_press:
-      - button.press: denon_paup
-      - delay: !lambda "return 1;"
-      - button.press: denon_paup
+      - button.press: denon_vol_up
+      - delay: !lambda "return 5;"
+      - button.press: denon_vol_up
   - platform: remote_receiver
     receiver_id: receiver_rf
     internal: true
@@ -18,6 +18,6 @@ binary_sensor:
       address: 1
       command: 0x11
     on_press:
-      - button.press: denon_padn
-      - delay: !lambda "return 1;"
-      - button.press: denon_padn
+      - button.press: denon_vol_down
+      - delay: !lambda "return 5;"
+      - button.press: denon_vol_down
