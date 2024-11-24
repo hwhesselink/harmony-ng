@@ -42,8 +42,10 @@ r = RemoteControl('URC3680', urc3680_rc6_keys)
 remotes.append(r)
 
 class Device(object):
-    def tx_cmd(self, ad, **kwargs):
-        svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, self.proto)
+    def tx_cmd(self, ad, proto=None, **kwargs):
+        if proto == None:
+            proto = self.proto
+        svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, proto)
         ad.call_service(svc, **kwargs)
 
 class Vizio_TV_M656G4(Device):
@@ -100,7 +102,7 @@ r.add_device(3, Cisco_STB_8742('Set Top Box'))
 
 class Denon_AVR_S760(Device):
     def __init__(self, name, instance=0):
-        self.proto = 'pronto'
+        self.proto = 'panasonic'
         self.commands = denon_avr_s760_cmds
         self.name = name
         self.instance = instance
@@ -109,8 +111,10 @@ class Denon_AVR_S760(Device):
         cmd = self.commands.get(key)
         if not cmd:
             return
-        name, data = cmd
-        self.tx_cmd(ad, data=data)
+        if isinstance(cmd, str) and cmd.startswith('0000 '):
+            self.tx_cmd(ad, proto='pronto', data=cmd)
+        else:
+            self.tx_cmd(ad, address=0x2A4C, command=cmd)
 
 r.add_device(5, Denon_AVR_S760('Receiver'))
 
@@ -156,6 +160,10 @@ class Harmony(hass.Hass):
             self.log("Unexpected mode %s, expected 0" % m)
             return
 
+        # punched-through MUTE, redirect to Audio
+        if (a, c) == (1, 0x0D):
+            a = 5
+
         # get remote that handles this address, last added if multiple
         v = [(r, r.get_device(a)) for r in reversed(remotes) if r.has_device(a)]
         if not v:
@@ -163,7 +171,7 @@ class Harmony(hass.Hass):
         remote, device = v[0]
 
         key = remote.key(c)
-        #self.log("%s %s %s" % (remote.name, c, key))
+        #self.log("%s %d %s %s" % (remote.name, a, c, key))
 
         # ignore unknown keypress
         if not key:
