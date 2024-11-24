@@ -27,7 +27,7 @@ sony_cmds_for_atv = {
     'KEY_PAUSE': ('Pause', (0x000003B0, 12)),
     'KEY_PLAY': ('Play', (0x00000FB0, 12)),
     'KEY_POWER': ('Power', (0x00000A90, 12)),
-    'KEY_LASTCH': ('Recall', (0x00000DD0, 12)),
+    'KEY_LAST': ('Recall', (0x00000DD0, 12)),
     'KEY_RECORD': ('Record', (0x000005B0, 12)),
     'KEY_PREVIOUS': ('Rewind', (0x000009B0, 12)),
     'KEY_RIGHT': ('Right', (0x00000CD0, 12)),
