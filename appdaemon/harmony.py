@@ -42,10 +42,20 @@ r = RemoteControl('URC3680', urc3680_rc6_keys)
 remotes.append(r)
 
 class Device(object):
-    def tx_cmd(self, ad, proto=None, **kwargs):
-        if proto == None:
-            proto = self.proto
+    def tx_cmd(self, ad, cmd, **kwargs):
+        proto = self.proto
+        if proto != 'pronto' and isinstance(cmd, str) and cmd.startswith('0000 '):
+            # if payload looks like Pronto, send it that way
+            proto = 'pronto'
+            kwargs = {}
         svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, proto)
+
+        if proto in ('nec', 'panasonic'):
+            cmdfld = 'command'
+        elif proto in ('pronto', 'sony'):
+            cmdfld = 'data'
+        kwargs[cmdfld] = cmd
+
         ad.call_service(svc, **kwargs)
 
 class Vizio_TV_M656G4(Device):
@@ -60,7 +70,7 @@ class Vizio_TV_M656G4(Device):
         if not cmd:
             return
         name, command = cmd
-        self.tx_cmd(ad, address=0xFB04, command=command)
+        self.tx_cmd(ad, command, address=0xFB04)
 
 r.add_device(1, Vizio_TV_M656G4('Vizio TV'))
 
@@ -78,9 +88,9 @@ class Apple_TV_4K(Device):
         name, (data, nbits) = cmd
         # 'wait' empirically determined for urc3680...
         if repcnt:
-            self.tx_cmd(ad, data=data, nbits=nbits, wait=115)
+            self.tx_cmd(ad, data, nbits=nbits, wait=115)
         else:
-            self.tx_cmd(ad, data=data, nbits=nbits, wait=10)
+            self.tx_cmd(ad, data, nbits=nbits, wait=10)
 
 r.add_device(2, Apple_TV_4K('Apple TV'))
 
@@ -96,7 +106,7 @@ class Cisco_STB_8742(Device):
         if not cmd:
             return
         name, data = cmd
-        self.tx_cmd(ad, data=data)
+        self.tx_cmd(ad, data)
 
 r.add_device(3, Cisco_STB_8742('Set Top Box'))
 
@@ -111,10 +121,7 @@ class Denon_AVR_S760(Device):
         cmd = self.commands.get(key)
         if not cmd:
             return
-        if isinstance(cmd, str) and cmd.startswith('0000 '):
-            self.tx_cmd(ad, proto='pronto', data=cmd)
-        else:
-            self.tx_cmd(ad, address=0x2A4C, command=cmd)
+        self.tx_cmd(ad, cmd, address=0x2A4C)
 
 r.add_device(5, Denon_AVR_S760('Receiver'))
 
@@ -130,7 +137,7 @@ class Panasonic_DVD_S700(Device):
         if not cmd:
             return
         name, command = cmd
-        self.tx_cmd(ad, address=0x4004, command=command)
+        self.tx_cmd(ad, command, address=0x4004)
 
 r.add_device(7, Panasonic_DVD_S700('DVD Player'))
 
