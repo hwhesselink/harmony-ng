@@ -170,6 +170,27 @@ config = {
             )
         }
     },
+    'activities': {
+        'KEY_WATCHTV': {
+            'devices': (
+                (1, 'Home Theater'),
+                (2, ''),
+                (5, 'Apple TV'),
+            )
+        },
+        'KEY_LISTENTOMUSIC': {
+            'devices': (
+                (5, 'LMS'),
+            )
+        }
+        'KEY_WATCHMOVIES': {
+            'devices': (
+                (1, 'Home Theater'),
+                (5, 'DVD Player'),
+                (7, ''),
+            )
+        }
+    },
 }
 
 class Harmony(hass.Hass):
@@ -180,6 +201,7 @@ class Harmony(hass.Hass):
         self.last_event = None
         self.repcnt = 0
         self.remotes = []
+        self.activities = []
 
         self.read_config()
 
