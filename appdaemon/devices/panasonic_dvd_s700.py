@@ -1,5 +1,7 @@
 panasonic_dvd_s700_cmds = {
     'KEY_POWER':        ('Power', 0x0D00BCB1),
+    'KEY_POWEROFF':     ('Power off', 'power_off'),
+    'KEY_POWERON':      ('Fake with Open/Close', 0x0D00808D),
     'KEY_INFO':         ('Display', 0x0D004944),
     'KEY_EJECT':        ('Open/Close', 0x0D00808D),
     'KEY_1':            ('1', 0x0D000805),

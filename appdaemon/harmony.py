@@ -42,10 +42,17 @@ class RemoteControl(object):
 class Device(object):
     def tx_cmd(self, cmd, **kwargs):
         proto = self.proto
-        if proto != 'pronto' and isinstance(cmd, str) and cmd.startswith('0000 '):
-            # if payload looks like Pronto, send it that way
-            proto = 'pronto'
-            kwargs = {}
+        if isinstance(cmd, str):
+            if proto != 'pronto' and cmd.startswith('0000 '):
+                # if payload looks like Pronto, send it that way
+                proto = 'pronto'
+                kwargs = {}
+            else:
+                f = getattr(self, cmd, None)
+                if f != None and callable(f):
+                    f()
+                    return
+
         svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, proto)
 
         if proto in ('nec', 'panasonic'):
@@ -126,6 +133,16 @@ class Panasonic_DVD_S700(Device):
         self.appdaemon = appdaemon
         self.name = name
         self.instance = instance
+
+    # The S700 is a TOAD, this emulates power off
+    def power_off(self):
+        play = self.commands.get('KEY_PLAY')
+        power = self.commands.get('KEY_POWER')
+        if play and power:
+            self.tx_cmd(play[1], address=0x4004)
+            # need to use asyncio for this eventually
+            time.sleep(.4)
+            self.tx_cmd(power[1], address=0x4004)
 
     def send_cmd(self, repcnt, key):
         cmd = self.commands.get(key)
