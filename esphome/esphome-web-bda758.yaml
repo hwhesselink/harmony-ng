@@ -112,10 +112,11 @@ api:
               - delay: !lambda "return wait;"
     - action: tx_nec
       variables:
+        address: int
         command: int
       then:
          - remote_transmitter.transmit_nec:
-              address: 0xBF40
+              address: !lambda 'return address;'
               command: !lambda 'return command;'
     - action: tx_necrep
       variables:
