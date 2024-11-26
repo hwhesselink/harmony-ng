@@ -44,7 +44,7 @@ panasonic_dvd_s700_cmds = {
 }
 
 '''
-Need to merge, from 176,0.csv.
+Need to merge, from 176,0.csv from http://harctoolbox.org/downloads/remotelocator.html#Panasonic
 Some (e.g. power on/off) don't work.
 
 Pause	0x0D00606D
