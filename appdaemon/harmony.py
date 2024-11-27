@@ -61,7 +61,14 @@ class Device(object):
             cmdfld = 'data'
         kwargs[cmdfld] = cmd
 
+        #print('CALL SVC', svc, kwargs)
         self.appdaemon.call_service(svc, **kwargs)
+
+    def power_on(self):
+        self.send_cmd(0, 'KEY_POWERON')
+
+    def power_off(self):
+        self.send_cmd(0, 'KEY_POWEROFF')
 
 class Vizio_TV_M656G4(Device):
     def __init__(self, appdaemon, name, instance=0):
@@ -153,8 +160,36 @@ class Panasonic_DVD_S700(Device):
 
 
 class Activity(object):
-    def __init__(self):
-        pass
+    def __init__(self, name, devices):
+        self.name = name
+        self.devices = devices
+
+    def start(self, remote, cur_activity=None):
+        to_start = set(i[0] for i in self.devices)
+        if cur_activity:
+            running = set(i[0] for i in cur_activity.devices)
+            to_stop = running - to_start
+            to_start = to_start - running
+            cur_activity.stop(remote, to_stop)
+
+        for ix, _ in self.devices:
+            if ix in to_start:
+                device = remote.addresses[ix]
+                #print("START %s" % device)
+                device.power_on()
+
+        for ix, input in self.devices:
+            device = remote.addresses[ix]
+            if input:
+                #print("SET INPUT TO %s" % input)
+                device.send_cmd(0, input)
+
+    def stop(self, remote, to_stop=None):
+        for ix, input in reversed(self.devices):
+            if to_stop == None or ix in to_stop:
+                device = remote.addresses[ix]
+                #print("STOP %s" % device)
+                device.power_off()
 
 
 config = {
@@ -173,23 +208,23 @@ config = {
     'activities': {
         'KEY_WATCHTV': {
             'devices': (
-                (1, 'Home Theater'),
+                (1, 'INPUT_HDMI_1'),
+                (5, 'INPUT_4'),
                 (2, ''),
-                (5, 'Apple TV'),
             )
         },
         'KEY_LISTENTOMUSIC': {
             'devices': (
-                (5, 'LMS'),
+                (5, 'INPUT_1'),
             )
-        }
+        },
         'KEY_WATCHMOVIES': {
             'devices': (
-                (1, 'Home Theater'),
-                (5, 'DVD Player'),
+                (1, 'INPUT_HDMI_1'),
+                (5, 'INPUT_2'),
                 (7, ''),
             )
-        }
+        },
     },
 }
 
@@ -201,7 +236,10 @@ class Harmony(hass.Hass):
         self.last_event = None
         self.repcnt = 0
         self.remotes = []
-        self.activities = []
+        self.activities = {}
+        self.in_device_mode = False
+        self.cur_device = None
+        self.cur_activity = None
 
         self.read_config()
 
@@ -214,6 +252,9 @@ class Harmony(hass.Hass):
             for ix, devtype, name in remconfig['devices']:
                 remote.add_device(ix, devtype(self, name))
             self.remotes.append(remote)
+
+        for name, actconfig in config['activities'].items():
+            self.activities[name] = Activity(name, actconfig['devices'])
 
     def handle_rc6_event(self, event_name, data, kwargs):
         a = data.get('address')
@@ -255,4 +296,36 @@ class Harmony(hass.Hass):
             self.last_event = (a, c, m, t)
             self.repcnt = 0
 
+        if key == 'KEY_POWERSHIFT':
+            self.in_device_mode = True
+            self.cur_device = a
+            self.cur_activity = None
+            return
+
+        if key in self.activities.keys():
+            if self.in_device_mode:
+                self.in_device_mode = False
+                self.cur_device = None
+            if self.cur_activity != key:
+                self.log("STARTING ACTIVITY %s" % key)
+                self.activities[key].start(remote, self.activities.get(self.cur_activity))
+                self.cur_activity = key
+            return
+
+        if not (self.cur_activity or self.cur_device):
+            return
+
+        if self.in_device_mode:
+            if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5'):
+                key = 'INPUT_' + key[4]
+            #self.log("SEND %s to device %s" % (key, self.cur_device))
+            device.send_cmd(self.repcnt, key)
+            return
+
+        if key == 'KEY_POWER':
+            self.activities[self.cur_activity].stop(remote)
+            self.cur_activity = None
+            return
+
+        #self.log("SEND %s to device %s in activity %s" % (key, device, self.cur_activity))
         device.send_cmd(self.repcnt, key)
