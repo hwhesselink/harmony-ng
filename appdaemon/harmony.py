@@ -160,9 +160,9 @@ class Panasonic_DVD_S700(Device):
 
 
 class Activity(object):
-    def __init__(self, name, devices):
+    def __init__(self, name, **kwargs):
         self.name = name
-        self.devices = devices
+        self.__dict__.update(kwargs)
 
     def start(self, remote, cur_activity=None):
         to_start = set(i[0] for i in self.devices)
@@ -207,10 +207,19 @@ config = {
     },
     'activities': {
         'KEY_WATCHTV': {
+            'main_device': 2,
             'devices': (
                 (1, 'INPUT_HDMI_1'),
                 (5, 'INPUT_4'),
                 (2, ''),
+            )
+        },
+        'KEY_WATCHTVHELD': {
+            'main_device': 3,
+            'devices': (
+                (1, 'INPUT_HDMI_1'),
+                (5, 'INPUT_3'),
+                (3, ''),
             )
         },
         'KEY_LISTENTOMUSIC': {
@@ -219,8 +228,16 @@ config = {
             )
         },
         'KEY_WATCHMOVIES': {
+            'main_device': 7,
             'devices': (
                 (1, 'INPUT_HDMI_1'),
+                (5, 'INPUT_2'),
+                (7, ''),
+            )
+        },
+        'KEY_WATCHMOVIESHELD': {
+            'main_device': 7,
+            'devices': (
                 (5, 'INPUT_2'),
                 (7, ''),
             )
@@ -254,7 +271,7 @@ class Harmony(hass.Hass):
             self.remotes.append(remote)
 
         for name, actconfig in config['activities'].items():
-            self.activities[name] = Activity(name, actconfig['devices'])
+            self.activities[name] = Activity(name, **actconfig)
 
     def handle_rc6_event(self, event_name, data, kwargs):
         a = data.get('address')
@@ -327,5 +344,6 @@ class Harmony(hass.Hass):
             self.cur_activity = None
             return
 
-        #self.log("SEND %s to device %s in activity %s" % (key, device, self.cur_activity))
-        device.send_cmd(self.repcnt, key)
+        md = self.activities[self.cur_activity].main_device
+        #self.log("SEND %s to device %s in activity %s" % (key, md, self.cur_activity))
+        remote.get_device(md).send_cmd(self.repcnt, key)
