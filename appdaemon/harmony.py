@@ -29,9 +29,6 @@ class RemoteControl(object):
     def add_device(self, address, device):
         self.addresses[address] = device
 
-    def has_device(self, address):
-        return address in self.addresses
-
     def get_device(self, address):
         return self.addresses.get(address)
 
@@ -164,82 +161,86 @@ class Activity(object):
         self.name = name
         self.__dict__.update(kwargs)
 
-    def start(self, remote, cur_activity=None):
+    def start(self, cur_activity=None):
         to_start = set(i[0] for i in self.devices)
         if cur_activity:
             running = set(i[0] for i in cur_activity.devices)
             to_stop = running - to_start
             to_start = to_start - running
-            cur_activity.stop(remote, to_stop)
+            cur_activity.stop(to_stop)
 
-        for ix, _ in self.devices:
-            if ix in to_start:
-                device = remote.addresses[ix]
-                #print("START %s" % device)
-                device.power_on()
+        for dev, _ in self.devices:
+            if dev in to_start:
+                print("START %s" % dev.name)
+                dev.power_on()
 
-        for ix, input in self.devices:
-            device = remote.addresses[ix]
+        for dev, input in self.devices:
             if input:
-                #print("SET INPUT TO %s" % input)
-                device.send_cmd(0, input)
+                print("SET %s INPUT TO %s" % (dev.name, input))
+                dev.send_cmd(0, input)
 
-    def stop(self, remote, to_stop=None):
-        for ix, input in reversed(self.devices):
-            if to_stop == None or ix in to_stop:
-                device = remote.addresses[ix]
-                #print("STOP %s" % device)
-                device.power_off()
+    def stop(self, to_stop=None):
+        for dev, _ in reversed(self.devices):
+            if to_stop == None or dev in to_stop:
+                print("STOP %s" % dev.name)
+                dev.power_off()
 
 
 config = {
+    'devices': {
+        'TV': Vizio_TV_M656G4,
+        'Apple TV': Apple_TV_4K,
+        'Set Top Box': Cisco_STB_8742,
+        'Receiver': Denon_AVR_S760,
+        'DVD Player': Panasonic_DVD_S700,
+    },
     'remotes': {
         'URC3680': {
             'keys': urc3680_rc6_keys,
             'devices': (
-                (1, Vizio_TV_M656G4, 'Vizio TV'),
-                (2, Apple_TV_4K, 'Apple TV'),
-                (3, Cisco_STB_8742, 'Set Top Box'),
-                (5, Denon_AVR_S760, 'Receiver'),
-                (7, Panasonic_DVD_S700, 'DVD Player'),
+                (1, 'TV'),
+                (2, 'Apple TV'),
+                (3, 'Set Top Box'),
+                (5, 'Receiver'),
+                (7, 'DVD Player'),
             )
-        }
+        },
     },
     'activities': {
         'KEY_WATCHTV': {
-            'main_device': 2,
+            'main_device': 'Apple TV',
             'devices': (
-                (1, 'INPUT_HDMI_1'),
-                (5, 'INPUT_4'),
-                (2, ''),
+                ('TV', 'INPUT_HDMI_1'),
+                ('Receiver', 'INPUT_4'),
+                ('Apple TV', ''),
             )
         },
         'KEY_WATCHTVHELD': {
-            'main_device': 3,
+            'main_device': 'Set Top Box',
             'devices': (
-                (1, 'INPUT_HDMI_1'),
-                (5, 'INPUT_3'),
-                (3, ''),
+                ('TV', 'INPUT_HDMI_1'),
+                ('Receiver', 'INPUT_3'),
+                ('Set Top Box', ''),
             )
         },
         'KEY_LISTENTOMUSIC': {
             'devices': (
-                (5, 'INPUT_1'),
+                ('Receiver', 'INPUT_1'),
             )
         },
         'KEY_WATCHMOVIES': {
-            'main_device': 7,
+            'main_device': 'DVD Player',
             'devices': (
-                (1, 'INPUT_HDMI_1'),
-                (5, 'INPUT_2'),
-                (7, ''),
+                ('TV', 'INPUT_HDMI_1'),
+                ('Receiver', 'INPUT_2'),
+                ('DVD Player', ''),
             )
         },
         'KEY_WATCHMOVIESHELD': {
-            'main_device': 7,
+            'main_device': 'DVD Player',
             'devices': (
-                (5, 'INPUT_2'),
-                (7, ''),
+                ('Receiver', 'INPUT_2'),
+                ('DVD Player', ''),
             )
         },
     },
@@ -252,6 +253,8 @@ class Harmony(hass.Hass):
 
         self.last_event = None
         self.repcnt = 0
+        self.devices = {}
+        self.device_addrs = {}
         self.remotes = []
         self.activities = {}
         self.in_device_mode = False
@@ -264,14 +267,29 @@ class Harmony(hass.Hass):
         self.listen_event(self.handle_rc6_event, 'esphome.receiver_ir', device_id=REMOTE)
 
     def read_config(self):
-        for name, remconfig in config['remotes'].items():
-            remote = RemoteControl(self, name, remconfig['keys'])
-            for ix, devtype, name in remconfig['devices']:
-                remote.add_device(ix, devtype(self, name))
+        for name, cls in config['devices'].items():
+            self.devices[name] = cls(self, name)
+
+        for name, conf in config['remotes'].items():
+            remote = RemoteControl(self, name, conf['keys'])
+            for addr, devname in conf['devices']:
+                dev = self.devices.get(devname)
+                if dev:
+                    if addr in self.device_addrs:
+                        self.log("Address %d already in use, skipping %s" % (addr, devname))
+                    else:
+                        remote.add_device(addr, dev)
+                        self.device_addrs[addr] = (remote, dev)
             self.remotes.append(remote)
 
-        for name, actconfig in config['activities'].items():
-            self.activities[name] = Activity(name, **actconfig)
+        for name, conf in config['activities'].items():
+            conf['devices'] = [(self.devices[name], input) for name, input in
+                                    conf['devices'] if name in self.devices]
+            self.activities[name] = Activity(name, **conf)
+        #print(self.devices)
+        #print(self.device_addrs)
+        #print(self.remotes)
+        #print(self.activities)
 
     def handle_rc6_event(self, event_name, data, kwargs):
         a = data.get('address')
@@ -287,11 +305,9 @@ class Harmony(hass.Hass):
         if (a, c) == (1, 0x0D):
             a = 5
 
-        # get remote that handles this address, last added if multiple
-        v = [(r, r.get_device(a)) for r in reversed(self.remotes) if r.has_device(a)]
-        if not v:
+        if not a in self.device_addrs:
             return
-        remote, device = v[0]
+        remote, device = self.device_addrs[a]
 
         key = remote.key(c)
         #self.log("%s %d %s %s" % (remote.name, a, c, key))
@@ -319,13 +335,13 @@ class Harmony(hass.Hass):
             self.cur_activity = None
             return
 
-        if key in self.activities.keys():
+        if key in self.activities:
             if self.in_device_mode:
                 self.in_device_mode = False
                 self.cur_device = None
             if self.cur_activity != key:
                 self.log("STARTING ACTIVITY %s" % key)
-                self.activities[key].start(remote, self.activities.get(self.cur_activity))
+                self.activities[key].start(self.activities.get(self.cur_activity))
                 self.cur_activity = key
             return
 
@@ -333,17 +349,17 @@ class Harmony(hass.Hass):
             return
 
         if self.in_device_mode:
-            if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5'):
-                key = 'INPUT_' + key[4]
+            #if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5'):
+            #    key = 'INPUT_' + key[4]
             #self.log("SEND %s to device %s" % (key, self.cur_device))
             device.send_cmd(self.repcnt, key)
             return
 
         if key == 'KEY_POWER':
-            self.activities[self.cur_activity].stop(remote)
+            self.activities[self.cur_activity].stop()
             self.cur_activity = None
             return
 
         md = self.activities[self.cur_activity].main_device
-        #self.log("SEND %s to device %s in activity %s" % (key, md, self.cur_activity))
-        remote.get_device(md).send_cmd(self.repcnt, key)
+        #self.log("SEND %s to %s in %s" % (key, md, self.cur_activity))
+        self.devices[md].send_cmd(self.repcnt, key)
