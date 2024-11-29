@@ -169,21 +169,21 @@ class Activity(object):
             to_start = to_start - running
             cur_activity.stop(to_stop)
 
-        for dev, _ in self.devices:
-            if dev in to_start:
-                print("START %s" % dev.name)
-                dev.power_on()
+        for device, _ in self.devices:
+            if device in to_start:
+                print("START %s" % device.name)
+                device.power_on()
 
-        for dev, input in self.devices:
+        for device, input in self.devices:
             if input:
-                print("SET %s INPUT TO %s" % (dev.name, input))
-                dev.send_cmd(0, input)
+                print("SET %s INPUT TO %s" % (device.name, input))
+                device.send_cmd(0, input)
 
     def stop(self, to_stop=None):
-        for dev, _ in reversed(self.devices):
-            if to_stop == None or dev in to_stop:
-                print("STOP %s" % dev.name)
-                dev.power_off()
+        for device, _ in reversed(self.devices):
+            if to_stop == None or device in to_stop:
+                print("STOP %s" % device.name)
+                device.power_off()
 
 
 config = {
@@ -273,13 +273,13 @@ class Harmony(hass.Hass):
         for name, conf in config['remotes'].items():
             remote = RemoteControl(self, name, conf['keys'])
             for addr, devname in conf['devices']:
-                dev = self.devices.get(devname)
-                if dev:
+                device = self.devices.get(devname)
+                if device:
                     if addr in self.device_addrs:
                         self.log("Address %d already in use, skipping %s" % (addr, devname))
                     else:
-                        remote.add_device(addr, dev)
-                        self.device_addrs[addr] = (remote, dev)
+                        remote.add_device(addr, device)
+                        self.device_addrs[addr] = (remote, device)
             self.remotes.append(remote)
 
         for name, conf in config['activities'].items():
