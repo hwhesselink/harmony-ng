@@ -20,9 +20,62 @@ esp32:
 logger:
   level: DEBUG
 
+globals:
+  - id: vol_proto
+    type: int
+  - id: vol_address
+    type: int
+  - id: vol_up_int
+    type: int
+  - id: vol_down_int
+    type: int
+  - id: vol_up_str
+    type: std::string
+  - id: vol_down_str
+    type: std::string
+  - id: vol_len
+    type: int
+  - id: vol_repeats
+    type: int
+
 # Enable Home Assistant API
 api:
   actions:
+    - action: set_volume_control
+      variables:
+        proto: int
+        address: int
+        up_int: int
+        down_int: int
+        up_str: string
+        down_str: string
+        len: int
+        repeats: int
+      then:
+        - globals.set:
+            id: vol_proto
+            value: !lambda "return proto;"
+        - globals.set:
+            id: vol_address
+            value: !lambda "return address;"
+        - globals.set:
+            id: vol_up_int
+            value: !lambda "return up_int;"
+        - globals.set:
+            id: vol_down_int
+            value: !lambda "return down_int;"
+        - globals.set:
+            id: vol_up_str
+            value: !lambda "return up_str;"
+        - globals.set:
+            id: vol_down_str
+            value: !lambda "return down_str;"
+        - globals.set:
+            id: vol_len
+            value: !lambda "return len;"
+        - globals.set:
+            id: vol_repeats
+            value: !lambda "return repeats;"
     - action: pana_vup
       then:
         - remote_transmitter.transmit_panasonic:
@@ -191,19 +244,27 @@ button:
   - platform: restart
     name: "${friendly_name} reboot"
   - platform: template
-    name: "Denon Vol UP"
-    id: denon_vol_up
+    name: "Volume UP"
+    id: volume_up
     on_press:
-      - remote_transmitter.transmit_panasonic:
-          address: 0x2A4C
-          command: 0x0280E86A
+      - if:
+          condition:
+            lambda: 'return (id(vol_proto) == 4);'
+          then:
+            - remote_transmitter.transmit_panasonic:
+                address: !lambda "return id(vol_address);"
+                command: !lambda "return id(vol_up_int);"
   - platform: template
-    name: "Denon Vol DOWN"
-    id: denon_vol_down
+    name: "Volume DOWN"
+    id: volume_down
     on_press:
-      - remote_transmitter.transmit_panasonic:
-          address: 0x2A4C
-          command: 0x0288E862
+      - if:
+          condition:
+            lambda: 'return (id(vol_proto) == 4);'
+          then:
+            - remote_transmitter.transmit_panasonic:
+                address: !lambda "return id(vol_address);"
+                command: !lambda "return id(vol_down_int);"
 
 packages:
   volume: !include common/volume.yaml
