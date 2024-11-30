@@ -17,6 +17,20 @@ LOG_LEVEL = "INFO"
 REMOTE = 'a1e13b4a8a46c8c156cdde70ee3be970'
 REMNAME = 'web_bda758'
 
+# These (arbitrary) numbers must match the Kincony ESP config volume_up/down buttons
+IRprotocols = {
+    'pronto': 1,
+    'lg': 2,
+    'nec': 3,
+    'panasonic': 4,
+    'pioneer': 5,
+    'rc5': 6,
+    'rc6': 7,
+    'samsung': 8,
+    'samsung36': 9,
+    'sony': 10,
+}
+
 
 class RemoteControl(object):
     def __init__(self, appdaemon, name, keys):
@@ -68,11 +82,12 @@ class Device(object):
         self.send_cmd(0, 'KEY_POWEROFF')
 
 class Vizio_TV_M656G4(Device):
-    def __init__(self, appdaemon, name, instance=0):
+    def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'nec'
         self.commands = vizio_tv_m656g4_cmds
         self.appdaemon = appdaemon
         self.name = name
+        self.address = address
         self.instance = instance
 
     def send_cmd(self, repcnt, key):
@@ -80,10 +95,10 @@ class Vizio_TV_M656G4(Device):
         if not cmd:
             return
         name, command = cmd
-        self.tx_cmd(command, address=0xFB04)
+        self.tx_cmd(command, address=self.address)
 
 class Apple_TV_4K(Device):
-    def __init__(self, appdaemon, name, instance=0):
+    def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'sony'
         self.commands = sony_cmds_for_atv
         self.appdaemon = appdaemon
@@ -102,7 +117,7 @@ class Apple_TV_4K(Device):
             self.tx_cmd(data, nbits=nbits, wait=10)
 
 class Cisco_STB_8742(Device):
-    def __init__(self, appdaemon, name, instance=0):
+    def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'pronto'
         self.commands = cisco_stb_8742_cmds
         self.appdaemon = appdaemon
@@ -117,25 +132,27 @@ class Cisco_STB_8742(Device):
         self.tx_cmd(data)
 
 class Denon_AVR_S760(Device):
-    def __init__(self, appdaemon, name, instance=0):
+    def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'panasonic'
         self.commands = denon_avr_s760_cmds
         self.appdaemon = appdaemon
         self.name = name
+        self.address = address
         self.instance = instance
 
     def send_cmd(self, repcnt, key):
         cmd = self.commands.get(key)
         if not cmd:
             return
-        self.tx_cmd(cmd, address=0x2A4C)
+        self.tx_cmd(cmd, address=self.address)
 
 class Panasonic_DVD_S700(Device):
-    def __init__(self, appdaemon, name, instance=0):
+    def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'panasonic'
         self.commands = panasonic_dvd_s700_cmds
         self.appdaemon = appdaemon
         self.name = name
+        self.address = address
         self.instance = instance
 
     # The S700 is a TOAD, this emulates power off
@@ -143,17 +160,17 @@ class Panasonic_DVD_S700(Device):
         play = self.commands.get('KEY_PLAY')
         power = self.commands.get('KEY_POWER')
         if play and power:
-            self.tx_cmd(play[1], address=0x4004)
+            self.tx_cmd(play[1], address=self.address)
             # need to use asyncio for this eventually
             time.sleep(.4)
-            self.tx_cmd(power[1], address=0x4004)
+            self.tx_cmd(power[1], address=self.address)
 
     def send_cmd(self, repcnt, key):
         cmd = self.commands.get(key)
         if not cmd:
             return
         name, command = cmd
-        self.tx_cmd(command, address=0x4004)
+        self.tx_cmd(command, address=self.address)
 
 
 class Activity(object):
@@ -188,11 +205,11 @@ class Activity(object):
 
 config = {
     'devices': {
-        'TV': Vizio_TV_M656G4,
-        'Apple TV': Apple_TV_4K,
-        'Set Top Box': Cisco_STB_8742,
-        'Receiver': Denon_AVR_S760,
-        'DVD Player': Panasonic_DVD_S700,
+        'TV': (Vizio_TV_M656G4, 0xFB04),
+        'Apple TV': (Apple_TV_4K, 0),
+        'Set Top Box': (Cisco_STB_8742, 0),
+        'Receiver': (Denon_AVR_S760, 0x2A4C),
+        'DVD Player': (Panasonic_DVD_S700, 0x4004),
     },
     'remotes': {
         'URC3680': {
@@ -263,12 +280,14 @@ class Harmony(hass.Hass):
 
         self.read_config()
 
+        self.set_volume_control(self.devices['Receiver'])
+
         self.listen_event(self.handle_rc6_event, 'esphome.receiver_rf', device_id=REMOTE)
         self.listen_event(self.handle_rc6_event, 'esphome.receiver_ir', device_id=REMOTE)
 
     def read_config(self):
-        for name, cls in config['devices'].items():
-            self.devices[name] = cls(self, name)
+        for name, (cls, addr) in config['devices'].items():
+            self.devices[name] = cls(self, name, addr)
 
         for name, conf in config['remotes'].items():
             remote = RemoteControl(self, name, conf['keys'])
@@ -286,10 +305,21 @@ class Harmony(hass.Hass):
             conf['devices'] = [(self.devices[name], input) for name, input in
                                     conf['devices'] if name in self.devices]
             self.activities[name] = Activity(name, **conf)
-        #print(self.devices)
-        #print(self.device_addrs)
-        #print(self.remotes)
-        #print(self.activities)
+
+    def set_volume_control(self, device):
+        svc = 'esphome/esphome_%s_set_volume_control' % REMNAME
+        kwargs = {
+            'proto': IRprotocols[device.proto],
+            'address': device.address,
+            'up_int': 0x0280E86A,
+            'down_int': 0x0288E862,
+            'up_str': '',
+            'down_str': '',
+            'len': 0,
+            'repeats': 0
+        }
+        #print('CALL SVC', svc, kwargs)
+        self.call_service(svc, **kwargs)
 
     def handle_rc6_event(self, event_name, data, kwargs):
         a = data.get('address')
