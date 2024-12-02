@@ -50,131 +50,157 @@ class RemoteControl(object):
         return self.keys.get(k)
 
 
-class Device(object):
-    def tx_cmd(self, cmd, **kwargs):
-        proto = self.proto
-        if isinstance(cmd, str):
-            if proto != 'pronto' and cmd.startswith('0000 '):
-                # if payload looks like Pronto, send it that way
-                proto = 'pronto'
-                kwargs = {}
+class Key(object):
+    """
+    Representation of a device key line.
+
+    The format is "(descr, IRcode)" where descr is a short free-form text
+    describing the function as it is known on the device (for e.g. tools
+    that link remote buttons to functions to use as help text), and IRcode
+    is what to send to the device.
+
+    The format of IRcode is "command" or "(command, args)" where command
+    is an int or string as required by the relevant ESP transmit function.
+    The args field is a dict with extra parameters (e.g. "{ 'nbits': 12 }"
+    for proto "sony").
+
+    Command can be a string in Pronto format to override the native command
+    or if the native one is unknown, in which case proto is set to "pronto".
+
+    If command is a string but not in Pronto format it is kept as-is and
+    proto is set to None so a higher-level can deal with it (e.g. call it
+    if it's a method name).
+    """
+    def __init__(self, proto, code):
+        self.proto = proto
+
+        self.descr, code = code[0], code[1]
+
+        if isinstance(code, str):
+            if code.startswith('0000 '):
+                # if code in Pronto format override native proto
+                self.proto = 'pronto'
             else:
-                f = getattr(self, cmd, None)
-                if f != None and callable(f):
-                    f()
-                    return
+                # code may be a method name
+                self.proto = None
+
+        if isinstance(code, (list, tuple)):
+            self.command = code[0]
+            self.args = code[1]
+        else:
+            self.command = code
+            self.args = {}
+
+    def gen_tx_args(self):
+        """ Generate key data formatted for ESP transmit. """
+        if self.proto == None:
+            return None, self.command
+
+        if self.proto in ('jvc', 'lg', 'pronto', 'samsung', 'sony'):
+            cmdname = 'data'
+        elif self.proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
+            cmdname = 'command'
+        elif self.proto == 'pioneer':
+            cmdname = 'rc_code_1'
+        rv = { cmdname: self.command }
+        rv.update(self.args)
+        return self.proto, rv
+
+
+class Device(object):
+    def __init__(self, appdaemon, name, address, instance):
+        self.appdaemon = appdaemon
+        self.name = name
+        self.address = address
+        self.instance = instance
+        self.keys = {}
+        for k, v in self.commands.items():
+            self.keys[k] = Key(self.proto, v)
+
+    def send_key(self, key, repcnt=0, **kwargs):
+        if key not in self.keys:
+            return
+        proto, args = self.keys[key].gen_tx_args()
+        if proto == 'pronto':
+            # drop any opt. args from a native proto (e.g. sony/wait)
+            kwargs = {}
+        elif proto == None:
+            f = getattr(self, args, None)
+            if f != None and callable(f):
+                # args is a method, call it
+                f()
+                return
+
+        if proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
+            args['address'] = self.address
+        args.update(kwargs)
 
         svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, proto)
-
-        if proto in ('nec', 'panasonic'):
-            cmdfld = 'command'
-        elif proto in ('pronto', 'sony'):
-            cmdfld = 'data'
-        kwargs[cmdfld] = cmd
-
-        #print('CALL SVC', svc, kwargs)
-        self.appdaemon.call_service(svc, **kwargs)
+        p = args.copy()
+        if proto == 'pronto':
+            p['data'] = '...'
+        print('SEND', key, svc, p)
+        self.appdaemon.call_service(svc, **args)
 
     def power_on(self):
-        self.send_cmd(0, 'KEY_POWERON')
+        self.send_key('KEY_POWERON')
 
     def power_off(self):
-        self.send_cmd(0, 'KEY_POWEROFF')
+        self.send_key('KEY_POWEROFF')
 
 class Vizio_TV_M656G4(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'nec'
         self.commands = vizio_tv_m656g4_cmds
-        self.appdaemon = appdaemon
-        self.name = name
-        self.address = address
-        self.instance = instance
-
-    def send_cmd(self, repcnt, key):
-        cmd = self.commands.get(key)
-        if not cmd:
-            return
-        name, command = cmd
-        self.tx_cmd(command, address=self.address)
+        super().__init__(appdaemon, name, address, instance)
 
 class Apple_TV_4K(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'sony'
         self.commands = sony_cmds_for_atv
-        self.appdaemon = appdaemon
-        self.name = name
-        self.instance = instance
+        super().__init__(appdaemon, name, address, instance)
 
-    def send_cmd(self, repcnt, key):
-        cmd = self.commands.get(key)
-        if not cmd:
-            return
-        name, (data, nbits) = cmd
+    def send_key(self, key, repcnt=0, **kwargs):
         # 'wait' empirically determined for urc3680...
         if repcnt:
-            self.tx_cmd(data, nbits=nbits, wait=115)
+            super().send_key(key, wait=115)
         else:
-            self.tx_cmd(data, nbits=nbits, wait=10)
+            super().send_key(key, wait=10)
 
 class Cisco_STB_8742(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'pronto'
         self.commands = cisco_stb_8742_cmds
-        self.appdaemon = appdaemon
-        self.name = name
-        self.instance = instance
-
-    def send_cmd(self, repcnt, key):
-        cmd = self.commands.get(key)
-        if not cmd:
-            return
-        name, data = cmd
-        self.tx_cmd(data)
+        super().__init__(appdaemon, name, address, instance)
 
 class Denon_AVR_S760(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'panasonic'
         self.commands = denon_avr_s760_cmds
-        self.appdaemon = appdaemon
-        self.name = name
-        self.address = address
-        self.instance = instance
-
-    def send_cmd(self, repcnt, key):
-        cmd = self.commands.get(key)
-        if not cmd:
-            return
-        self.tx_cmd(cmd, address=self.address)
+        super().__init__(appdaemon, name, address, instance)
 
 class Panasonic_DVD_S700(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'panasonic'
         self.commands = panasonic_dvd_s700_cmds
-        self.appdaemon = appdaemon
-        self.name = name
-        self.address = address
-        self.instance = instance
+        super().__init__(appdaemon, name, address, instance)
 
-    # The S700 is a TOAD, this emulates power off
+    # The S700 is a TOAD, these emulate the missing power funcs
+    def power_on(self):
+        # Eject is not perfect but mostly does the right thing
+        self.send_key('KEY_EJECT')
+
     def power_off(self):
-        play = self.commands.get('KEY_PLAY')
-        power = self.commands.get('KEY_POWER')
-        if play and power:
-            self.tx_cmd(play[1], address=self.address)
+        if 'KEY_PLAY' in self.keys and 'KEY_POWER' in self.keys:
+            self.send_key('KEY_PLAY')
             # need to use asyncio for this eventually
             time.sleep(.4)
-            self.tx_cmd(power[1], address=self.address)
-
-    def send_cmd(self, repcnt, key):
-        cmd = self.commands.get(key)
-        if not cmd:
-            return
-        name, command = cmd
-        self.tx_cmd(command, address=self.address)
+            self.send_key('KEY_POWER')
 
 
 class Activity(object):
-    def __init__(self, name, **kwargs):
+    def __init__(self, appdaemon, name, **kwargs):
+        self.appdaemon = appdaemon
         self.name = name
         self.__dict__.update(kwargs)
 
@@ -186,21 +212,49 @@ class Activity(object):
             to_start = to_start - running
             cur_activity.stop(to_stop)
 
+        voldev = self.__dict__.get('volume_device')
         for device, _ in self.devices:
             if device in to_start:
                 print("START %s" % device.name)
                 device.power_on()
+            if device.name == voldev:
+                self.set_volume_control(device)
 
         for device, input in self.devices:
             if input:
                 print("SET %s INPUT TO %s" % (device.name, input))
-                device.send_cmd(0, input)
+                device.send_key(input)
 
     def stop(self, to_stop=None):
         for device, _ in reversed(self.devices):
             if to_stop == None or device in to_stop:
                 print("STOP %s" % device.name)
                 device.power_off()
+
+    def set_volume_control(self, device):
+        vol_up = device.keys['KEY_VOLUMEUP']
+        vol_down = device.keys['KEY_VOLUMEDOWN']
+        if vol_up.proto != vol_down.proto:
+            self.log("Proto mismatch between volume UP and DOWN")
+            return
+        if vol_up.proto == None:
+            self.log("Volume command cannot be method in set_volume_control()")
+            return
+        settings = {
+            'proto': IRprotocols[vol_up.proto],
+            'address': device.address,
+            'up_int': 0,
+            'down_int': 0,
+            'up_str': '',
+            'down_str': '',
+            'len': 0,
+            'repeats': 0
+        }
+        settings[isinstance(vol_up.command, str) and 'up_str' or 'up_int'] = vol_up.command
+        settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command
+        svc = 'esphome/esphome_%s_set_volume_control' % REMNAME
+        print('SET VOLUME DEVICE TO', device.name, svc, settings)
+        self.appdaemon.call_service(svc, **settings)
 
 
 config = {
@@ -226,6 +280,7 @@ config = {
     'activities': {
         'KEY_WATCHTV': {
             'main_device': 'Apple TV',
+            'volume_device': 'Receiver',
             'devices': (
                 ('TV', 'INPUT_HDMI_1'),
                 ('Receiver', 'INPUT_4'),
@@ -234,6 +289,7 @@ config = {
         },
         'KEY_WATCHTVHELD': {
             'main_device': 'Set Top Box',
+            'volume_device': 'Receiver',
             'devices': (
                 ('TV', 'INPUT_HDMI_1'),
                 ('Receiver', 'INPUT_3'),
@@ -241,12 +297,20 @@ config = {
             )
         },
         'KEY_LISTENTOMUSIC': {
+            'volume_device': 'Receiver',
             'devices': (
                 ('Receiver', 'INPUT_1'),
             )
         },
+        'KEY_LISTENTOMUSICHELD': {
+            'volume_device': 'Receiver',
+            'devices': (
+                ('Receiver', 'INPUT_9'),
+            )
+        },
         'KEY_WATCHMOVIES': {
             'main_device': 'DVD Player',
+            'volume_device': 'Receiver',
             'devices': (
                 ('TV', 'INPUT_HDMI_1'),
                 ('Receiver', 'INPUT_2'),
@@ -255,6 +319,7 @@ config = {
         },
         'KEY_WATCHMOVIESHELD': {
             'main_device': 'DVD Player',
+            'volume_device': 'Receiver',
             'devices': (
                 ('Receiver', 'INPUT_2'),
                 ('DVD Player', ''),
@@ -280,14 +345,15 @@ class Harmony(hass.Hass):
 
         self.read_config()
 
-        self.set_volume_control(self.devices['Receiver'])
-
         self.listen_event(self.handle_rc6_event, 'esphome.receiver_rf', device_id=REMOTE)
         self.listen_event(self.handle_rc6_event, 'esphome.receiver_ir', device_id=REMOTE)
 
     def read_config(self):
         for name, (cls, addr) in config['devices'].items():
             self.devices[name] = cls(self, name, addr)
+        #self.log('DEVinit done')
+        #self.log(self.devices['Receiver'].keys['KEY_1'])
+        #self.devices['DVD Player'].send_key('KEY_POWEROFF')
 
         for name, conf in config['remotes'].items():
             remote = RemoteControl(self, name, conf['keys'])
@@ -304,22 +370,7 @@ class Harmony(hass.Hass):
         for name, conf in config['activities'].items():
             conf['devices'] = [(self.devices[name], input) for name, input in
                                     conf['devices'] if name in self.devices]
-            self.activities[name] = Activity(name, **conf)
-
-    def set_volume_control(self, device):
-        svc = 'esphome/esphome_%s_set_volume_control' % REMNAME
-        kwargs = {
-            'proto': IRprotocols[device.proto],
-            'address': device.address,
-            'up_int': 0x0280E86A,
-            'down_int': 0x0288E862,
-            'up_str': '',
-            'down_str': '',
-            'len': 0,
-            'repeats': 0
-        }
-        #print('CALL SVC', svc, kwargs)
-        self.call_service(svc, **kwargs)
+            self.activities[name] = Activity(self, name, **conf)
 
     def handle_rc6_event(self, event_name, data, kwargs):
         a = data.get('address')
@@ -331,16 +382,12 @@ class Harmony(hass.Hass):
             self.log("Unexpected mode %s, expected 0" % m)
             return
 
-        # punched-through MUTE, redirect to Audio
-        if (a, c) == (1, 0x0D):
-            a = 5
-
         if not a in self.device_addrs:
             return
         remote, device = self.device_addrs[a]
 
         key = remote.key(c)
-        #self.log("%s %d %s %s" % (remote.name, a, c, key))
+        self.log("%s %d %s %s" % (remote.name, a, c, key))
 
         # ignore unknown keypress
         if not key:
@@ -379,17 +426,21 @@ class Harmony(hass.Hass):
             return
 
         if self.in_device_mode:
-            #if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5'):
+            #if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5', '6', '7', '8', '9', '0'):
             #    key = 'INPUT_' + key[4]
-            #self.log("SEND %s to device %s" % (key, self.cur_device))
-            device.send_cmd(self.repcnt, key)
+            self.log("SEND %s to device %s" % (key, self.cur_device))
+            device.send_key(key, self.repcnt)
             return
 
+        curact = self.activities[self.cur_activity]
         if key == 'KEY_POWER':
-            self.activities[self.cur_activity].stop()
+            curact.stop()
             self.cur_activity = None
             return
 
-        md = self.activities[self.cur_activity].main_device
-        #self.log("SEND %s to %s in %s" % (key, md, self.cur_activity))
-        self.devices[md].send_cmd(self.repcnt, key)
+        if key == 'KEY_MUTE':
+            device = curact.volume_device
+        else:
+            device = curact.main_device
+        self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
+        self.devices[device].send_key(key, self.repcnt)
