@@ -12,7 +12,7 @@ remote_receiver:
   - id: receiver_rf
     pin:
       number: GPIO13
-    filter: 250us
+    filter: 350us
 #    dump:
 #    - abbwelcome
 #    - aeha
