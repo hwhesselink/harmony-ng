@@ -33,18 +33,15 @@ IRprotocols = {
 
 
 class RemoteControl(object):
-    def __init__(self, appdaemon, name, keys):
+    def __init__(self, appdaemon, name, **kwargs):
         self.appdaemon = appdaemon
         self.log = appdaemon.log
         self.name = name
-        self.keys = keys
+        self.__dict__.update(kwargs)
         self.addresses = {}
 
     def add_device(self, address, device):
         self.addresses[address] = device
-
-    def get_device(self, address):
-        return self.addresses.get(address)
 
     def key(self, k):
         return self.keys.get(k)
@@ -139,7 +136,7 @@ class Device(object):
         p = args.copy()
         if proto == 'pronto':
             p['data'] = '...'
-        print('SEND', key, svc, p)
+        #print('SEND', key, svc, p)
         self.appdaemon.call_service(svc, **args)
 
     def power_on(self):
@@ -266,7 +263,8 @@ config = {
         'DVD Player': (Panasonic_DVD_S700, 0x4004),
     },
     'remotes': {
-        'URC3680': {
+        'Living Room': {
+            'type': 'urc3680',
             'keys': urc3680_rc6_keys,
             'devices': (
                 (1, 'TV'),
@@ -337,7 +335,7 @@ class Harmony(hass.Hass):
         self.repcnt = 0
         self.devices = {}
         self.device_addrs = {}
-        self.remotes = []
+        self.remotes = {}
         self.activities = {}
         self.in_device_mode = False
         self.cur_device = None
@@ -356,7 +354,7 @@ class Harmony(hass.Hass):
         #self.devices['DVD Player'].send_key('KEY_POWEROFF')
 
         for name, conf in config['remotes'].items():
-            remote = RemoteControl(self, name, conf['keys'])
+            remote = RemoteControl(self, name, **conf)
             for addr, devname in conf['devices']:
                 device = self.devices.get(devname)
                 if device:
@@ -365,7 +363,7 @@ class Harmony(hass.Hass):
                     else:
                         remote.add_device(addr, device)
                         self.device_addrs[addr] = (remote, device)
-            self.remotes.append(remote)
+            self.remotes[name] = remote
 
         for name, conf in config['activities'].items():
             conf['devices'] = [(self.devices[name], input) for name, input in
@@ -378,6 +376,7 @@ class Harmony(hass.Hass):
         m = data.get('mode')
         t = data.get('toggle')
 
+        self.log("%s %s %s %s" % (a, c, m, t))
         if m != 0:
             self.log("Unexpected mode %s, expected 0" % m)
             return
@@ -387,7 +386,7 @@ class Harmony(hass.Hass):
         remote, device = self.device_addrs[a]
 
         key = remote.key(c)
-        self.log("%s %d %s %s" % (remote.name, a, c, key))
+        #self.log("%s %d %s %s" % (remote.name, a, c, key))
 
         # ignore unknown keypress
         if not key:
@@ -428,7 +427,7 @@ class Harmony(hass.Hass):
         if self.in_device_mode:
             #if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5', '6', '7', '8', '9', '0'):
             #    key = 'INPUT_' + key[4]
-            self.log("SEND %s to device %s" % (key, self.cur_device))
+            #self.log("SEND %s to device %s" % (key, self.cur_device))
             device.send_key(key, self.repcnt)
             return
 
