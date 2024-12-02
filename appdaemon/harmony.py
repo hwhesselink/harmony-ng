@@ -376,7 +376,7 @@ class Harmony(hass.Hass):
         m = data.get('mode')
         t = data.get('toggle')
 
-        self.log("%s %s %s %s" % (a, c, m, t))
+        #self.log("%s %s %s %s" % (a, c, m, t))
         if m != 0:
             self.log("Unexpected mode %s, expected 0" % m)
             return
@@ -441,5 +441,5 @@ class Harmony(hass.Hass):
             device = curact.volume_device
         else:
             device = curact.main_device
-        self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
+        #self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
         self.devices[device].send_key(key, self.repcnt)

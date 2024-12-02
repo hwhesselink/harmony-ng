@@ -18,7 +18,7 @@ esp32:
 
 # Enable logging
 logger:
-  level: DEBUG
+  level: INFO
 
 globals:
   - id: vol_proto
@@ -227,17 +227,17 @@ web_server:
 #    reset_reason:
 #      name: "Reset Reason"
 
+remote_transmitter:
+  - id: transmitter_ir
+    pin: GPIO2
+    carrier_duty_percent: 50%
+
 sensor:
   - platform: wifi_signal
     name: "${friendly_name} Wifi Signal Strength"
     update_interval: 60s
   - platform: uptime
     name: "${friendly_name} Uptime"
-
-remote_transmitter:
-  - id: transmitter_ir
-    pin: GPIO2
-    carrier_duty_percent: 50%
 
 button:
   # Restart the ESP
