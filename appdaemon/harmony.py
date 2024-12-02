@@ -110,6 +110,8 @@ class Device(object):
         self.name = name
         self.address = address
         self.instance = instance
+        self.vol_repeats = 1
+        self.vol_repeat_wait = 0
         self.keys = {}
         for k, v in self.commands.items():
             self.keys[k] = Key(self.proto, v)
@@ -175,6 +177,8 @@ class Denon_AVR_S760(Device):
         self.proto = 'panasonic'
         self.commands = denon_avr_s760_cmds
         super().__init__(appdaemon, name, address, instance)
+        self.vol_repeats = 2
+        self.vol_repeat_wait = 5
 
 class Panasonic_DVD_S700(Device):
     def __init__(self, appdaemon, name, address, instance=0):
@@ -245,7 +249,8 @@ class Activity(object):
             'up_str': '',
             'down_str': '',
             'len': 0,
-            'repeats': 0
+            'repeats': device.vol_repeats,
+            'repeat_wait': device.vol_repeat_wait,
         }
         settings[isinstance(vol_up.command, str) and 'up_str' or 'up_int'] = vol_up.command
         settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command

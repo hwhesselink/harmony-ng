@@ -37,6 +37,8 @@ globals:
     type: int
   - id: vol_repeats
     type: int
+  - id: vol_repeat_wait
+    type: int
 
 # Enable Home Assistant API
 api:
@@ -51,6 +53,7 @@ api:
         down_str: string
         len: int
         repeats: int
+        repeat_wait: int
       then:
         - globals.set:
             id: vol_proto
@@ -76,6 +79,9 @@ api:
         - globals.set:
             id: vol_repeats
             value: !lambda "return repeats;"
+        - globals.set:
+            id: vol_repeat_wait
+            value: !lambda "return repeat_wait;"
     - action: pana_vup
       then:
         - remote_transmitter.transmit_panasonic:
@@ -239,6 +245,26 @@ sensor:
   - platform: uptime
     name: "${friendly_name} Uptime"
 
+binary_sensor:
+  - platform: remote_receiver
+    receiver_id: receiver_rf
+    internal: true
+    name: "RC6 Vol+"
+    rc6:
+      address: 1
+      command: 0x10
+    on_press:
+      - button.press: volume_up
+  - platform: remote_receiver
+    receiver_id: receiver_rf
+    internal: true
+    name: "RC6 Vol-"
+    rc6:
+      address: 1
+      command: 0x11
+    on_press:
+      - button.press: volume_down
+
 button:
   # Restart the ESP
   - platform: restart
@@ -247,40 +273,47 @@ button:
     name: "Volume UP"
     id: volume_up
     on_press:
-      - if:
-          condition:
-            lambda: 'return (id(vol_proto) == 3);'
+      - repeat:
+          count: !lambda "return id(vol_repeats);"
           then:
-            - remote_transmitter.transmit_nec:
-                address: !lambda "return id(vol_address);"
-                command: !lambda "return id(vol_up_int);"
-      - if:
-          condition:
-            lambda: 'return (id(vol_proto) == 4);'
-          then:
-            - remote_transmitter.transmit_panasonic:
-                address: !lambda "return id(vol_address);"
-                command: !lambda "return id(vol_up_int);"
+            - if:
+                condition:
+                  lambda: 'return (id(vol_proto) == 3);'
+                then:
+                  - remote_transmitter.transmit_nec:
+                      address: !lambda "return id(vol_address);"
+                      command: !lambda "return id(vol_up_int);"
+            - if:
+                condition:
+                  lambda: 'return (id(vol_proto) == 4);'
+                then:
+                  - remote_transmitter.transmit_panasonic:
+                      address: !lambda "return id(vol_address);"
+                      command: !lambda "return id(vol_up_int);"
+            - delay: !lambda "return id(vol_repeat_wait);"
   - platform: template
     name: "Volume DOWN"
     id: volume_down
     on_press:
-      - if:
-          condition:
-            lambda: 'return (id(vol_proto) == 3);'
+      - repeat:
+          count: !lambda "return id(vol_repeats);"
           then:
-            - remote_transmitter.transmit_nec:
-                address: !lambda "return id(vol_address);"
-                command: !lambda "return id(vol_down_int);"
-      - if:
-          condition:
-            lambda: 'return (id(vol_proto) == 4);'
-          then:
-            - remote_transmitter.transmit_panasonic:
-                address: !lambda "return id(vol_address);"
-                command: !lambda "return id(vol_down_int);"
+            - if:
+                condition:
+                  lambda: 'return (id(vol_proto) == 3);'
+                then:
+                  - remote_transmitter.transmit_nec:
+                      address: !lambda "return id(vol_address);"
+                      command: !lambda "return id(vol_down_int);"
+            - if:
+                condition:
+                  lambda: 'return (id(vol_proto) == 4);'
+                then:
+                  - remote_transmitter.transmit_panasonic:
+                      address: !lambda "return id(vol_address);"
+                      command: !lambda "return id(vol_down_int);"
+            - delay: !lambda "return id(vol_repeat_wait);"
 
 packages:
-  volume: !include common/volume.yaml
 #  remote_rcvr_ir: !include common/remote_rcvr_ir.yaml
   remote_rcvr_rf: !include common/remote_rcvr_rf.yaml
