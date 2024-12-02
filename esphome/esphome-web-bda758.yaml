@@ -249,6 +249,13 @@ button:
     on_press:
       - if:
           condition:
+            lambda: 'return (id(vol_proto) == 3);'
+          then:
+            - remote_transmitter.transmit_nec:
+                address: !lambda "return id(vol_address);"
+                command: !lambda "return id(vol_up_int);"
+      - if:
+          condition:
             lambda: 'return (id(vol_proto) == 4);'
           then:
             - remote_transmitter.transmit_panasonic:
@@ -258,6 +265,13 @@ button:
     name: "Volume DOWN"
     id: volume_down
     on_press:
+      - if:
+          condition:
+            lambda: 'return (id(vol_proto) == 3);'
+          then:
+            - remote_transmitter.transmit_nec:
+                address: !lambda "return id(vol_address);"
+                command: !lambda "return id(vol_down_int);"
       - if:
           condition:
             lambda: 'return (id(vol_proto) == 4);'
