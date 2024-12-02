@@ -16,7 +16,13 @@ to control:
 - Panasonic CD/DVD player
 - Apple TV
 - Cox Cisco set top box
-- [Lyrion Music Server](https://lyrion.org) (formerly Logitech Media Server) as input to the receiver
+- [Lyrion Music Server](https://lyrion.org) (formerly Logitech Media Server)
 - activities in [Home Assistant ](https://www.home-assistant.io)
 
-The code runs in [Appdaemon](https://appdaemon.readthedocs.io/en/latest) and the gateway is configured using [ESPHome](https://esphome.io/index.html).  
+This setup supports up to 12 activities and unlimited devices.  For the rare occasion a device needs to be addressed directly this remote can control up to 8 (likely 16 with a bit of code, but not tested).
+
+It is trivial to add a device if it's IR codes are known, slightly more work if the codes need to be learned but the Kincony can be used for that.
+
+Any remote that puts out Philips RC-6 IR can be used but the JP1 programmable universal ones with activity buttons are ideal.
+
+The code runs in [Appdaemon](https://appdaemon.readthedocs.io/en/latest) and the gateway is configured using [ESPHome](https://esphome.io/index.html).  I have Appdaemon and ESPHome running in my Home Assistant which makes integration and interaction a breeze.  If you don't have Home Assistant (you should😃!) both can run standalone.  Alternatively you can install Home Assistant on a RaspberryPi (minimum 3B) just for this.
