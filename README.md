@@ -21,7 +21,7 @@ to control:
 
 This setup supports up to 12 activities and unlimited devices.  For the rare occasion a device needs to be addressed directly this remote can control up to 8 (likely 16 with a bit of code, but not tested).
 
-It is trivial to add a device if it's IR codes are known, slightly more work if the codes need to be learned but the Kincony can be used for that.
+It is trivial to add a device if its IR codes are known, slightly more work if the codes need to be learned but the Kincony can be used for that.
 
 Any remote that puts out Philips RC-6 IR can be used but the JP1 programmable universal ones with activity buttons are ideal.
 
