@@ -10,6 +10,7 @@ from devices.cisco_stb_8742 import cisco_stb_8742_cmds
 from devices.denon_avr_s760 import denon_avr_s760_cmds
 from devices.panasonic_dvd_s700 import panasonic_dvd_s700_cmds
 from devices.pioneer_pd_m_6_disc_changer import pioneer_pdm_6_disc_cmds
+from devices.pioneer_vsx_4500s import pioneer_vsx_4500s_cmds
 from devices.vizio_tv_m656g4 import vizio_tv_m656g4_cmds
 
 LOG_LEVEL = "INFO"
@@ -203,6 +204,12 @@ class Pioneer_PD_M_6_Disc_Changer(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'pronto'
         self.commands = pioneer_pdm_6_disc_cmds
+        super().__init__(appdaemon, name, address, instance)
+
+class Pioneer_VSX_4500S(Device):
+    def __init__(self, appdaemon, name, address, instance=0):
+        self.proto = 'pronto'
+        self.commands = pioneer_vsx_4500s_cmds
         super().__init__(appdaemon, name, address, instance)
 
 
