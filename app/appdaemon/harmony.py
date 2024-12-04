@@ -9,7 +9,7 @@ from devices.apple_tv_4k import sony_cmds_for_atv
 from devices.cisco_stb_8742 import cisco_stb_8742_cmds
 from devices.denon_avr_s760 import denon_avr_s760_cmds
 from devices.panasonic_dvd_s700 import panasonic_dvd_s700_cmds
-from devices/pioneer_pd_m_6_disc_changer import pioneer_pdm_6_disc_cmds
+from devices.pioneer_pd_m_6_disc_changer import pioneer_pdm_6_disc_cmds
 from devices.vizio_tv_m656g4 import vizio_tv_m656g4_cmds
 
 LOG_LEVEL = "INFO"
@@ -273,6 +273,7 @@ config = {
         'Set Top Box': (Cisco_STB_8742, 0),
         'Receiver': (Denon_AVR_S760, 0x2A4C),
         'DVD Player': (Panasonic_DVD_S700, 0x4004),
+        'CD Player': (Pioneer_PD_M_6_Disc_Changer, 0),
     },
     'remotes': {
         'Living Room': {
@@ -283,6 +284,7 @@ config = {
                 (2, 'Apple TV'),
                 (3, 'Set Top Box'),
                 (5, 'Receiver'),
+                (6, 'CD Player'),
                 (7, 'DVD Player'),
             )
         },
