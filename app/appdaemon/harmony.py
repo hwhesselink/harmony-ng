@@ -59,9 +59,9 @@ class Key(object):
     is what to send to the device.
 
     The format of IRcode is "command" or "(command, args)" where command
-    is an int or string as required by the relevant ESP transmit function.
-    The args field is a dict with extra parameters (e.g. "{ 'nbits': 12 }"
-    for proto "sony").
+    is an int, a string, or a 2-item tuple for 2-part Pioneer commands,
+    as required by the relevant ESP transmit function.  The args field is a
+    dict with extra parameters (e.g. "{ 'nbits': 12 }" for proto "sony").
 
     Command can be a string in Pronto format to override the native command
     or if the native one is unknown, in which case proto is set to "pronto".
@@ -95,15 +95,21 @@ class Key(object):
         if self.proto == None:
             return None, self.command
 
-        if self.proto in ('jvc', 'lg', 'pronto', 'samsung', 'sony'):
+        proto = self.proto
+        if proto in ('jvc', 'lg', 'pronto', 'samsung', 'sony'):
             cmdname = 'data'
-        elif self.proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
+        elif proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
             cmdname = 'command'
-        elif self.proto == 'pioneer':
+        elif proto == 'pioneer':
             cmdname = 'rc_code_1'
+            self.args['repeat'] = 3
+            if isinstance(self.command, (list, tuple)):
+                self.command, command2 = self.command
+                self.args['rc_code_2'] = command2
+                proto = 'pioneer2'
         rv = { cmdname: self.command }
         rv.update(self.args)
-        return self.proto, rv
+        return proto, rv
 
 
 class Device(object):
@@ -202,15 +208,17 @@ class Panasonic_DVD_S700(Device):
 
 class Pioneer_PD_M_6_Disc_Changer(Device):
     def __init__(self, appdaemon, name, address, instance=0):
-        self.proto = 'pronto'
+        self.proto = 'pioneer'
         self.commands = pioneer_pdm_6_disc_cmds
         super().__init__(appdaemon, name, address, instance)
 
 class Pioneer_VSX_4500S(Device):
     def __init__(self, appdaemon, name, address, instance=0):
-        self.proto = 'pronto'
+        self.proto = 'pioneer'
         self.commands = pioneer_vsx_4500s_cmds
         super().__init__(appdaemon, name, address, instance)
+        self.vol_repeats = 2
+        self.vol_repeat_wait = 10
 
 
 class Activity(object):
@@ -316,12 +324,14 @@ config = {
             )
         },
         'KEY_LISTENTOMUSIC': {
+            'main_device': 'Receiver',
             'volume_device': 'Receiver',
             'devices': (
                 ('Receiver', 'INPUT_1'),
             )
         },
         'KEY_LISTENTOMUSICHELD': {
+            'main_device': 'Receiver',
             'volume_device': 'Receiver',
             'devices': (
                 ('Receiver', 'INPUT_9'),

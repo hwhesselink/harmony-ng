@@ -126,6 +126,26 @@ api:
       then:
         - remote_transmitter.transmit_pronto:
             data: '0000 0048 0000 0018 00C0 00C0 0030 0090 0030 0090 0030 0030 0030 0090 0030 0090 0030 0030 0030 0090 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0090 0030 0030 0030 0030 0030 0090 0030 0030 0030 0090 0030 0090 0030 0090 0030 0090 0030 09E6'
+    - action: tx_pioneer
+      variables:
+        rc_code_1: int
+        repeat: int
+      then:
+        - remote_transmitter.transmit_pioneer:
+            rc_code_1: !lambda 'return rc_code_1;'
+            repeat:
+              times: !lambda 'return repeat;'
+    - action: tx_pioneer2
+      variables:
+        rc_code_1: int
+        rc_code_2: int
+        repeat: int
+      then:
+        - remote_transmitter.transmit_pioneer:
+            rc_code_1: !lambda 'return rc_code_1;'
+            rc_code_2: !lambda 'return rc_code_2;'
+            repeat:
+              times: !lambda 'return repeat;'
     - action: tx_sony
       variables:
         data: int
@@ -278,6 +298,12 @@ button:
           then:
             - if:
                 condition:
+                  lambda: 'return (id(vol_proto) == 1);'
+                then:
+                  - remote_transmitter.transmit_pronto:
+                      data: !lambda "return id(vol_up_str);"
+            - if:
+                condition:
                   lambda: 'return (id(vol_proto) == 3);'
                 then:
                   - remote_transmitter.transmit_nec:
@@ -290,6 +316,12 @@ button:
                   - remote_transmitter.transmit_panasonic:
                       address: !lambda "return id(vol_address);"
                       command: !lambda "return id(vol_up_int);"
+            - if:
+                condition:
+                  lambda: 'return (id(vol_proto) == 5);'
+                then:
+                  - remote_transmitter.transmit_pioneer:
+                      rc_code_1: !lambda "return id(vol_up_int);"
             - delay: !lambda "return id(vol_repeat_wait);"
   - platform: template
     name: "Volume DOWN"
@@ -300,6 +332,12 @@ button:
           then:
             - if:
                 condition:
+                  lambda: 'return (id(vol_proto) == 1);'
+                then:
+                  - remote_transmitter.transmit_pronto:
+                      data: !lambda "return id(vol_down_str);"
+            - if:
+                condition:
                   lambda: 'return (id(vol_proto) == 3);'
                 then:
                   - remote_transmitter.transmit_nec:
@@ -312,6 +350,12 @@ button:
                   - remote_transmitter.transmit_panasonic:
                       address: !lambda "return id(vol_address);"
                       command: !lambda "return id(vol_down_int);"
+            - if:
+                condition:
+                  lambda: 'return (id(vol_proto) == 5);'
+                then:
+                  - remote_transmitter.transmit_pioneer:
+                      rc_code_1: !lambda "return id(vol_down_int);"
             - delay: !lambda "return id(vol_repeat_wait);"
 
 packages:
