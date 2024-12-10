@@ -221,6 +221,7 @@ wifi:
 #  use_address: 10.12.2.42
 #  ssid: !secret wifi_ssid_cfb
 #  password: !secret wifi_password_cfb
+#  use_address: 10.12.1.30
 #  ssid: !secret wifi_ssid_lpb
 #  password: !secret wifi_password_lpb
 #  manual_ip:
