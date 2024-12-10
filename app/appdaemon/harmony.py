@@ -40,10 +40,6 @@ class RemoteControl(object):
         self.log = appdaemon.log
         self.name = name
         self.__dict__.update(kwargs)
-        self.addresses = {}
-
-    def add_device(self, address, device):
-        self.addresses[address] = device
 
     def key(self, k):
         return self.keys.get(k)
@@ -392,7 +388,6 @@ class Harmony(hass.Hass):
                     if addr in self.device_addrs:
                         self.log("Address %d already in use, skipping %s" % (addr, devname))
                     else:
-                        remote.add_device(addr, device)
                         self.device_addrs[addr] = (remote, device)
             self.remotes[name] = remote
 
