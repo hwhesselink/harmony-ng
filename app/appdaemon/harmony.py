@@ -131,7 +131,7 @@ class Device(object):
             f = getattr(self, args, None)
             if f != None and callable(f):
                 # args is a method, call it
-                f()
+                f(key, repcnt)
                 return
 
         if proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
@@ -142,13 +142,13 @@ class Device(object):
         p = args.copy()
         if proto == 'pronto':
             p['data'] = '...'
-        #print('SEND', key, svc, p)
+        self.appdaemon.log("SEND %s %s %s" % (key, svc, p))
         self.appdaemon.call_service(svc, **args)
 
-    def power_on(self):
+    def power_on(self, key, repcnt):
         self.send_key('KEY_POWERON')
 
-    def power_off(self):
+    def power_off(self, key, repcnt):
         self.send_key('KEY_POWEROFF')
 
 class Vizio_TV_M656G4(Device):
@@ -158,10 +158,40 @@ class Vizio_TV_M656G4(Device):
         super().__init__(appdaemon, name, address, instance)
 
 class Apple_TV_4K(Device):
+    key_map = {
+            'KEY_BACK': 'menu',
+            'KEY_DOWN': 'down',
+            'KEY_GUIDE': 'top_menu',
+            'KEY_HOME': 'home',
+            'KEY_LEFT': 'left',
+            'KEY_MENU': 'menu',
+            'KEY_NEXT': 'skip_forward',
+            'KEY_OK': 'select',
+            'KEY_POWEROFF': 'suspend',
+            'KEY_POWERON': 'wakeup',
+            'KEY_PREVIOUS': 'skip_backward',
+            'KEY_RIGHT': 'right',
+            'KEY_SLEEP': 'suspend',
+            'KEY_UP': 'up',
+            'KEY_VOLUMEDOWN': 'volume_down',
+            'KEY_VOLUMEUP': 'volume_up',
+    }
+
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'sony'
         self.commands = sony_cmds_for_atv
         super().__init__(appdaemon, name, address, instance)
+
+    def atv_send(self, key, repcnt):
+        if key == 'KEY_OK' and self.appdaemon.get_state('media_player.upper_living_room') not in ('idle', 'standby'):
+            # if playing/paused override OK key to toggle play/pause
+            self.send_key('KEY_PLAY', repcnt)
+            return
+        cmd = self.key_map.get(key)
+        if not cmd:
+            return
+        print('atv_send CALLED', cmd, 'FROM', key)
+        self.appdaemon.call_service("remote/send_command", entity_id=self.address, command=cmd)
 
     def send_key(self, key, repcnt=0, **kwargs):
         # 'wait' empirically determined for urc3680...
@@ -191,11 +221,11 @@ class Panasonic_DVD_S700(Device):
         super().__init__(appdaemon, name, address, instance)
 
     # The S700 is a TOAD, these emulate the missing power funcs
-    def power_on(self):
+    def power_on(self, key, repcnt):
         # Eject is not perfect but mostly does the right thing
         self.send_key('KEY_EJECT')
 
-    def power_off(self):
+    def power_off(self, key, repcnt):
         if 'KEY_PLAY' in self.keys and 'KEY_POWER' in self.keys:
             self.send_key('KEY_PLAY')
             # need to use asyncio for this eventually
@@ -235,7 +265,7 @@ class Activity(object):
         for device, _ in self.devices:
             if device in to_start:
                 print("START %s" % device.name)
-                device.power_on()
+                device.power_on(None, 1)
             if device.name == voldev:
                 self.set_volume_control(device)
 
@@ -248,7 +278,7 @@ class Activity(object):
         for device, _ in reversed(self.devices):
             if to_stop == None or device in to_stop:
                 print("STOP %s" % device.name)
-                device.power_off()
+                device.power_off(None, 1)
 
     def set_volume_control(self, device):
         vol_up = device.keys['KEY_VOLUMEUP']
@@ -280,7 +310,7 @@ class Activity(object):
 config = {
     'devices': {
         'TV': (Vizio_TV_M656G4, 0xFB04),
-        'Apple TV': (Apple_TV_4K, 0),
+        'Apple TV': (Apple_TV_4K, "remote.upper_living_room"),
         'Set Top Box': (Cisco_STB_8742, 0),
         'Receiver': (Denon_AVR_S760, 0x2A4C),
         'DVD Player': (Panasonic_DVD_S700, 0x4004),
@@ -467,5 +497,5 @@ class Harmony(hass.Hass):
             device = curact.volume_device
         else:
             device = curact.main_device
-        #self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
+        self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
         self.devices[device].send_key(key, self.repcnt)
