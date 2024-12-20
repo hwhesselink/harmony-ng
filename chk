@@ -1,0 +1,25 @@
+#!/bin/bash
+
+## set -x
+
+CWD=/Users/henk/git/harmony-ng
+HA=10.12.3.142
+
+cd $CWD || exit
+
+rm -rf x_old
+mv -f x x_old
+mkdir x
+cd x
+mkdir appdaemon	esphome
+
+rsync -e ssh -a $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/harmony.py $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/devices $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/remotes appdaemon
+rsync -e ssh -a $HA:/config/esphome/common $HA:/config/esphome/esphome-web-bda758.yaml esphome
+
+rm -rf appdaemon/*/__pycache__
+rm -f appdaemon/devices/{pi6,pia,xx}
+
+for i in $(find . -type f)
+do
+	cmp $i ../app/$i > /dev/null && rm -f $i
+done
