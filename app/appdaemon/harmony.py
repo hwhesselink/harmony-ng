@@ -142,7 +142,7 @@ class Device(object):
         p = args.copy()
         if proto == 'pronto':
             p['data'] = '...'
-        self.appdaemon.log("SEND %s %s %s" % (key, svc, p))
+        #self.appdaemon.log("SEND %s %s %s" % (key, svc, p))
         self.appdaemon.call_service(svc, **args)
 
     def power_on(self, key, repcnt):
@@ -180,18 +180,21 @@ class Apple_TV_4K(Device):
     def __init__(self, appdaemon, name, address, instance=0):
         self.proto = 'sony'
         self.commands = sony_cmds_for_atv
+        self.remote = 'remote.' + address
+        self.player = 'media_player.' + address
         super().__init__(appdaemon, name, address, instance)
 
     def atv_send(self, key, repcnt):
-        if key == 'KEY_OK' and self.appdaemon.get_state('media_player.upper_living_room') not in ('idle', 'standby'):
+        #self.appdaemon.log("atv_send KEY %s, STATE %s" % (key, self.appdaemon.get_state(self.player)))
+        if key == 'KEY_OK' and self.appdaemon.get_state(self.player) not in ('idle', 'standby'):
             # if playing/paused override OK key to toggle play/pause
             self.send_key('KEY_PLAY', repcnt)
             return
         cmd = self.key_map.get(key)
         if not cmd:
             return
-        print('atv_send CALLED', cmd, 'FROM', key)
-        self.appdaemon.call_service("remote/send_command", entity_id=self.address, command=cmd)
+        #self.appdaemon.log("atv_send REMOTE SEND %s" % cmd)
+        self.appdaemon.call_service("remote/send_command", entity_id=self.remote, command=cmd)
 
     def send_key(self, key, repcnt=0, **kwargs):
         # 'wait' empirically determined for urc3680...
@@ -310,7 +313,7 @@ class Activity(object):
 config = {
     'devices': {
         'TV': (Vizio_TV_M656G4, 0xFB04),
-        'Apple TV': (Apple_TV_4K, "remote.upper_living_room"),
+        'Apple TV': (Apple_TV_4K, "upper_living_room"),
         'Set Top Box': (Cisco_STB_8742, 0),
         'Receiver': (Denon_AVR_S760, 0x2A4C),
         'DVD Player': (Panasonic_DVD_S700, 0x4004),
@@ -497,5 +500,5 @@ class Harmony(hass.Hass):
             device = curact.volume_device
         else:
             device = curact.main_device
-        self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
+        #self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
         self.devices[device].send_key(key, self.repcnt)
