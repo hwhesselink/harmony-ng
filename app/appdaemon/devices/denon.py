@@ -1,4 +1,4 @@
-denon_avr_s760_cmds = {
+denon_avr_s760 = {
     'INPUT_1': ('Cbl/Sat', 0x028CB43A),
     'INPUT_2': ('MediaPlayer', 0x0286B430),
     'INPUT_3': ('Blu-ray', 0x0288B43E),

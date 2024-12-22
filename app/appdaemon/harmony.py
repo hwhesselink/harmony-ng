@@ -2,13 +2,12 @@ import hassapi as hass
 
 import asyncio, time
 
-from devices.apple_tv_4k import sony_cmds_for_atv
-from devices.cisco_stb_8742 import cisco_stb_8742_cmds
-from devices.denon_avr_s760 import denon_avr_s760_cmds
-from devices.panasonic_dvd_s700 import panasonic_dvd_s700_cmds
-from devices.pioneer_pd_m_6_disc_changer import pioneer_pdm_6_disc_cmds
-from devices.pioneer_vsx_4500s import pioneer_vsx_4500s_cmds
-from devices.vizio_tv_m656g4 import vizio_tv_m656g4_cmds
+from devices.apple import sony_cmds_for_atv
+from devices.cisco import cisco_stb_8742
+from devices.denon import denon_avr_s760
+from devices.panasonic import panasonic_dvd_s700
+from devices.pioneer import pioneer_pdm_6_disc, pioneer_vsx_4500s
+from devices.vizio import vizio_tv_m656g4
 
 LOG_LEVEL = "INFO"
 
@@ -279,7 +278,7 @@ class Device(object):
 class Vizio_TV_M656G4(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'nec'
-        self.commands = vizio_tv_m656g4_cmds
+        self.commands = vizio_tv_m656g4
         super().__init__(room, name, address, instance)
 
 class Apple_TV_4K(Device):
@@ -331,13 +330,13 @@ class Apple_TV_4K(Device):
 class Cisco_STB_8742(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'pronto'
-        self.commands = cisco_stb_8742_cmds
+        self.commands = cisco_stb_8742
         super().__init__(room, name, address, instance)
 
 class Denon_AVR_S760(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'panasonic'
-        self.commands = denon_avr_s760_cmds
+        self.commands = denon_avr_s760
         super().__init__(room, name, address, instance)
         self.vol_repeats = 2
         self.vol_repeat_wait = 5
@@ -345,7 +344,7 @@ class Denon_AVR_S760(Device):
 class Panasonic_DVD_S700(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'panasonic'
-        self.commands = panasonic_dvd_s700_cmds
+        self.commands = panasonic_dvd_s700
         super().__init__(room, name, address, instance)
 
     # The S700 is a TOAD, these emulate the missing power funcs
@@ -363,13 +362,13 @@ class Panasonic_DVD_S700(Device):
 class Pioneer_PD_M_6_Disc_Changer(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'pioneer'
-        self.commands = pioneer_pdm_6_disc_cmds
+        self.commands = pioneer_pdm_6_disc
         super().__init__(room, name, address, instance)
 
 class Pioneer_VSX_4500S(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'pioneer'
-        self.commands = pioneer_vsx_4500s_cmds
+        self.commands = pioneer_vsx_4500s
         super().__init__(room, name, address, instance)
         self.vol_repeats = 2
         self.vol_repeat_wait = 10

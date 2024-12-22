@@ -1,4 +1,4 @@
-panasonic_dvd_s700_cmds = {
+panasonic_dvd_s700 = {
     'KEY_POWER':        ('Power', 0x0D00BCB1),
     'KEY_POWEROFF':     ('Power off', 'power_off'),
     'KEY_POWERON':      ('Fake with Open/Close', 0x0D00808D),

@@ -1,4 +1,4 @@
-vizio_tv_m656g4_cmds = {
+vizio_tv_m656g4 = {
     'KEY_0':              ('0', 0xEF10),
     'KEY_1':              ('1', 0xEE11),
     'KEY_2':              ('2', 0xED12),
