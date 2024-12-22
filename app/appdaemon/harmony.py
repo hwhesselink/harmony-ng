@@ -2,9 +2,6 @@ import hassapi as hass
 
 import asyncio, time
 
-from remotes.sony_vl600_8001 import rm_vl600_8001_keys
-from remotes.urc3680 import urc3680_rc6_keys
-
 from devices.apple_tv_4k import sony_cmds_for_atv
 from devices.cisco_stb_8742 import cisco_stb_8742_cmds
 from devices.denon_avr_s760 import denon_avr_s760_cmds
@@ -33,16 +30,141 @@ IRprotocols = {
     'sony': 10,
 }
 
+rc6_button_names = {
+    0x00: 'KEY_0',
+    0x01: 'KEY_1',
+    0x02: 'KEY_2',
+    0x03: 'KEY_3',
+    0x04: 'KEY_4',
+    0x05: 'KEY_5',
+    0x06: 'KEY_6',
+    0x07: 'KEY_7',
+    0x08: 'KEY_8',
+    0x09: 'KEY_9',
+    0x0A: 'KEY_LAST',
+    0x0C: 'KEY_POWER',
+    0x0D: 'KEY_MUTE',
+    0x0F: 'KEY_INFO',
+    0x10: 'KEY_VOLUMEUP',
+    0x11: 'KEY_VOLUMEDOWN',
+    0x20: 'KEY_CHANNELUP',
+    0x21: 'KEY_CHANNELDOWN',
+    0x28: 'KEY_NEXT',
+    0x2B: 'KEY_PREVIOUS',
+    0x2C: 'KEY_PLAY',
+    0x30: 'KEY_PAUSE',
+    0x31: 'KEY_STOP',
+    0x37: 'KEY_RECORD',
+    0x38: 'KEY_INPUT',
+    0x41: 'KEY_BACK',
+    0x42: 'KEY_EJECT',
+    0x4B: 'KEY_PREVIOUSHELD',
+    0x4C: 'KEY_NEXTHELD',
+    0x54: 'KEY_HOME',
+    0x57: 'KEY_MENU',
+    0x58: 'KEY_UP',
+    0x59: 'KEY_DOWN',
+    0x5A: 'KEY_LEFT',
+    0x5B: 'KEY_RIGHT',
+    0x5C: 'KEY_OK',
+    0x6D: 'KEY_RED',
+    0x6E: 'KEY_GREEN',
+    0x6F: 'KEY_YELLOW',
+    0x70: 'KEY_BLUE',
+    0x71: 'KEY_BACKLIGHT',
+    0x76: 'KEY_PROG1',
+    0x77: 'KEY_PROG2',
+    0x79: 'KEY_PROG3',
+    0x92: 'KEY_ENTER',
+    0x9F: 'KEY_EXIT',
+    0xCC: 'KEY_GUIDE',
+    0xD2: 'KEY_LIST',
+    0xD9: 'KEY_MINUS',
+    0xE0: 'KEY_WATCHTV',
+    0xE1: 'KEY_LISTENTOMUSIC',
+    0xE2: 'KEY_WATCHMOVIES',
+    0xE3: 'KEY_WATCHTVHELD',
+    0xE4: 'KEY_LISTENTOMUSICHELD',
+    0xE5: 'KEY_WATCHMOVIESHELD',
+    0xE6: 'KEY_WATCHTVSHIFT',
+    0xE7: 'KEY_LISTENTOMUSICSHIFT',
+    0xE8: 'KEY_WATCHMOVIESSHIFT',
+    0xF0: 'KEY_POWERSHIFT',
+    0xF1: 'KEY_LIVE',
+    0xF2: 'KEY_REPLAY',
+}
 
-class RemoteControl(object):
+class Room(object):
     def __init__(self, appdaemon, name, **kwargs):
         self.appdaemon = appdaemon
         self.log = appdaemon.log
         self.name = name
-        self.__dict__.update(kwargs)
+        self._set_devices(kwargs.get('devices', {}))
+        self._set_activities(kwargs.get('activities', {}))
 
-    def key(self, k):
-        return self.keys.get(k)
+        self.in_device_mode = False
+        self.cur_device = None
+        self.cur_activity = None
+
+    def _set_devices(self, devices):
+        self.devices = {}
+        self.device_names = {}
+        for ix, (name, cls, addr) in devices.items():
+            self.device_names[name] = self.devices[ix] = cls(self, name, addr)
+
+    def _set_activities(self, activities):
+        self.activities = {}
+        for activity, config in activities.items():
+            config['devices'] = [(self.device_names[name], input) for name, input in config['devices'] if name in self.device_names]
+            config['main_device'] = self.device_names.get(config['main_device'])
+            config['volume_device'] = self.device_names.get(config['volume_device'])
+            self.activities[activity] = Activity(self, activity, **config)
+            #self.log(self.activities[activity])
+
+    def __str__(self):
+        return "Room: %s\n  Activities: %s\n  Devices: %s" % (
+                    self.name,
+                    ', '.join(map(str, sorted(self.activities.keys()))),
+                    ', '.join(sorted("%s (%d)" % (d.name, i) for (i, d) in self.devices.items()))
+                )
+
+    def set_device_mode(self, addr):
+        self.in_device_mode = True
+        self.cur_activity = None
+        self.cur_device = addr
+
+    def set_activity_mode(self, activity):
+        if self.in_device_mode:
+            self.in_device_mode = False
+            self.cur_device = None
+        activity = self.activities.get(activity)
+        if activity and self.cur_activity != activity:
+            self.log("STARTING ACTIVITY %s" % activity.name)
+            activity.start(self.cur_activity)
+            self.cur_activity = activity
+
+    def active(self):
+        return (self.cur_activity != None or self.cur_device != None)
+
+    def send(self, address, key, repcnt):
+        #print('ROOM:', self)
+        if self.in_device_mode:
+            device = self.devices.get(address)
+            if device:
+                device.send_key(key, repcnt)
+            return
+
+        if key == 'KEY_POWER':
+            self.cur_activity.stop()
+            self.cur_activity = None
+            return
+
+        if key == 'KEY_MUTE':
+            device = self.cur_activity.volume_device
+        else:
+            device = self.cur_activity.main_device
+        #self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
+        device.send_key(key, repcnt)
 
 
 class Key(object):
@@ -109,8 +231,8 @@ class Key(object):
 
 
 class Device(object):
-    def __init__(self, appdaemon, name, address, instance):
-        self.appdaemon = appdaemon
+    def __init__(self, room, name, address, instance):
+        self.appdaemon = room.appdaemon
         self.name = name
         self.address = address
         self.instance = instance
@@ -119,6 +241,9 @@ class Device(object):
         self.keys = {}
         for k, v in self.commands.items():
             self.keys[k] = Key(self.proto, v)
+
+    def __str__(self):
+        return "Device %s" % self.name
 
     def send_key(self, key, repcnt=0, **kwargs):
         if key not in self.keys:
@@ -152,10 +277,10 @@ class Device(object):
         self.send_key('KEY_POWEROFF')
 
 class Vizio_TV_M656G4(Device):
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'nec'
         self.commands = vizio_tv_m656g4_cmds
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
 
 class Apple_TV_4K(Device):
     key_map = {
@@ -177,12 +302,12 @@ class Apple_TV_4K(Device):
             'KEY_VOLUMEUP': 'volume_up',
     }
 
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'sony'
         self.commands = sony_cmds_for_atv
         self.remote = 'remote.' + address
         self.player = 'media_player.' + address
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
 
     def atv_send(self, key, repcnt):
         #self.appdaemon.log("atv_send KEY %s, STATE %s" % (key, self.appdaemon.get_state(self.player)))
@@ -204,24 +329,24 @@ class Apple_TV_4K(Device):
             super().send_key(key, wait=10)
 
 class Cisco_STB_8742(Device):
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'pronto'
         self.commands = cisco_stb_8742_cmds
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
 
 class Denon_AVR_S760(Device):
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'panasonic'
         self.commands = denon_avr_s760_cmds
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
         self.vol_repeats = 2
         self.vol_repeat_wait = 5
 
 class Panasonic_DVD_S700(Device):
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'panasonic'
         self.commands = panasonic_dvd_s700_cmds
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
 
     # The S700 is a TOAD, these emulate the missing power funcs
     def power_on(self, key, repcnt):
@@ -236,25 +361,34 @@ class Panasonic_DVD_S700(Device):
             self.send_key('KEY_POWER')
 
 class Pioneer_PD_M_6_Disc_Changer(Device):
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'pioneer'
         self.commands = pioneer_pdm_6_disc_cmds
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
 
 class Pioneer_VSX_4500S(Device):
-    def __init__(self, appdaemon, name, address, instance=0):
+    def __init__(self, room, name, address, instance=0):
         self.proto = 'pioneer'
         self.commands = pioneer_vsx_4500s_cmds
-        super().__init__(appdaemon, name, address, instance)
+        super().__init__(room, name, address, instance)
         self.vol_repeats = 2
         self.vol_repeat_wait = 10
 
 
 class Activity(object):
-    def __init__(self, appdaemon, name, **kwargs):
-        self.appdaemon = appdaemon
+    def __init__(self, room, name, **kwargs):
+        self.room = room
+        self.appdaemon = room.appdaemon
         self.name = name
+        self.main_device = None
+        self.volume_device = None
         self.__dict__.update(kwargs)
+
+    def __str__(self):
+        return "Activity: %s (main device: %s, volume device: %s)\n  Devices: %s" % (
+                    self.name, self.main_device, self.volume_device,
+                    ', '.join(sorted("%s[%s]" % (d.name, i) for (d, i) in self.devices))
+                )
 
     def start(self, cur_activity=None):
         to_start = set(i[0] for i in self.devices)
@@ -264,13 +398,11 @@ class Activity(object):
             to_start = to_start - running
             cur_activity.stop(to_stop)
 
-        voldev = self.__dict__.get('volume_device')
         for device, _ in self.devices:
             if device in to_start:
                 print("START %s" % device.name)
                 device.power_on(None, 1)
-            if device.name == voldev:
-                self.set_volume_control(device)
+        self.set_volume_control()
 
         for device, input in self.devices:
             if input:
@@ -283,7 +415,10 @@ class Activity(object):
                 print("STOP %s" % device.name)
                 device.power_off(None, 1)
 
-    def set_volume_control(self, device):
+    def set_volume_control(self):
+        device = self.volume_device
+        if not device:
+            return
         vol_up = device.keys['KEY_VOLUMEUP']
         vol_down = device.keys['KEY_VOLUMEDOWN']
         if vol_up.proto != vol_down.proto:
@@ -306,82 +441,132 @@ class Activity(object):
         settings[isinstance(vol_up.command, str) and 'up_str' or 'up_int'] = vol_up.command
         settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command
         svc = 'esphome/esphome_%s_set_volume_control' % REMNAME
-        print('SET VOLUME DEVICE TO', device.name, svc, settings)
+        self.appdaemon.log("SET VOLUME DEVICE TO %s %s %s" % (device.name, svc, settings))
         self.appdaemon.call_service(svc, **settings)
 
 
+# The 'devices' number must match the RC-6 address sent by the remote(s)
 config = {
-    'devices': {
-        'TV': (Vizio_TV_M656G4, 0xFB04),
-        'Apple TV': (Apple_TV_4K, "upper_living_room"),
-        'Set Top Box': (Cisco_STB_8742, 0),
-        'Receiver': (Denon_AVR_S760, 0x2A4C),
-        'DVD Player': (Panasonic_DVD_S700, 0x4004),
-        'CD Player': (Pioneer_PD_M_6_Disc_Changer, 0),
-    },
-    'remotes': {
-        'Living Room': {
-            'type': 'urc3680',
-            'keys': urc3680_rc6_keys,
-            'devices': (
-                (1, 'TV'),
-                (2, 'Apple TV'),
-                (3, 'Set Top Box'),
-                (5, 'Receiver'),
-                (6, 'CD Player'),
-                (7, 'DVD Player'),
-            )
+    'rooms': {
+        'Upper Living Room': {
+            'devices': {
+                1: ('TV', Vizio_TV_M656G4, 0xFB04),
+                2: ('Apple TV', Apple_TV_4K, "upper_living_room"),
+                3: ('Set Top Box', Cisco_STB_8742, 0),
+                5: ('Receiver', Denon_AVR_S760, 0x2A4C),
+                7: ('DVD Player', Panasonic_DVD_S700, 0x4004),
+            },
+            'activities': {
+                'KEY_WATCHTV': {
+                    'main_device': 'Apple TV',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_4'),
+                        ('Apple TV', ''),
+                    )
+                },
+                'KEY_WATCHTVHELD': {
+                    'main_device': 'Set Top Box',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_3'),
+                        ('Set Top Box', ''),
+                    )
+                },
+                'KEY_LISTENTOMUSIC': {
+                    'main_device': 'Receiver',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_1'),
+                    )
+                },
+                'KEY_LISTENTOMUSICHELD': {
+                    'main_device': 'Receiver',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_9'),
+                    )
+                },
+                'KEY_WATCHMOVIES': {
+                    'main_device': 'DVD Player',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_2'),
+                        ('DVD Player', ''),
+                    )
+                },
+                'KEY_WATCHMOVIESHELD': {
+                    'main_device': 'DVD Player',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_2'),
+                        ('DVD Player', ''),
+                    )
+                },
+            },
         },
-    },
-    'activities': {
-        'KEY_WATCHTV': {
-            'main_device': 'Apple TV',
-            'volume_device': 'Receiver',
-            'devices': (
-                ('TV', 'INPUT_HDMI_1'),
-                ('Receiver', 'INPUT_4'),
-                ('Apple TV', ''),
-            )
-        },
-        'KEY_WATCHTVHELD': {
-            'main_device': 'Set Top Box',
-            'volume_device': 'Receiver',
-            'devices': (
-                ('TV', 'INPUT_HDMI_1'),
-                ('Receiver', 'INPUT_3'),
-                ('Set Top Box', ''),
-            )
-        },
-        'KEY_LISTENTOMUSIC': {
-            'main_device': 'Receiver',
-            'volume_device': 'Receiver',
-            'devices': (
-                ('Receiver', 'INPUT_1'),
-            )
-        },
-        'KEY_LISTENTOMUSICHELD': {
-            'main_device': 'Receiver',
-            'volume_device': 'Receiver',
-            'devices': (
-                ('Receiver', 'INPUT_9'),
-            )
-        },
-        'KEY_WATCHMOVIES': {
-            'main_device': 'DVD Player',
-            'volume_device': 'Receiver',
-            'devices': (
-                ('TV', 'INPUT_HDMI_1'),
-                ('Receiver', 'INPUT_2'),
-                ('DVD Player', ''),
-            )
-        },
-        'KEY_WATCHMOVIESHELD': {
-            'main_device': 'DVD Player',
-            'volume_device': 'Receiver',
-            'devices': (
-                ('Receiver', 'INPUT_2'),
-                ('DVD Player', ''),
-            )
+        'TV Room': {
+            'devices': {
+                9: ('TV', Vizio_TV_M656G4, 0xFB04),
+                10: ('Apple TV', Apple_TV_4K, "tv_room"),
+                11: ('Set Top Box', Cisco_STB_8742, 0),
+                13: ('Receiver', Pioneer_VSX_4500S, 0),
+                14: ('CD Player', Pioneer_PD_M_6_Disc_Changer, 0),
+            },
+            'activities': {
+                'KEY_WATCHTV': {
+                    'main_device': 'Apple TV',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_4'),
+                        ('Apple TV', ''),
+                    )
+                },
+                'KEY_WATCHTVHELD': {
+                    'main_device': 'Set Top Box',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_3'),
+                        ('Set Top Box', ''),
+                    )
+                },
+                'KEY_LISTENTOMUSIC': {
+                    'main_device': 'Receiver',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_1'),
+                    )
+                },
+                'KEY_LISTENTOMUSICHELD': {
+                    'main_device': 'Receiver',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_9'),
+                    )
+                },
+                'KEY_WATCHMOVIES': {
+                    'main_device': 'DVD Player',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_2'),
+                        ('DVD Player', ''),
+                    )
+                },
+                'KEY_WATCHMOVIESHELD': {
+                    'main_device': 'DVD Player',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_2'),
+                        ('DVD Player', ''),
+                    )
+                },
+            },
         },
     },
 }
@@ -393,13 +578,7 @@ class Harmony(hass.Hass):
 
         self.last_event = None
         self.repcnt = 0
-        self.devices = {}
-        self.device_addrs = {}
-        self.remotes = {}
-        self.activities = {}
-        self.in_device_mode = False
-        self.cur_device = None
-        self.cur_activity = None
+        self.room_addrs = {}
 
         self.read_config()
 
@@ -407,45 +586,30 @@ class Harmony(hass.Hass):
         self.listen_event(self.handle_rc6_event, 'esphome.receiver_ir', device_id=REMOTE)
 
     def read_config(self):
-        for name, (cls, addr) in config['devices'].items():
-            self.devices[name] = cls(self, name, addr)
-        #self.log('DEVinit done')
-        #self.log(self.devices['Receiver'].keys['KEY_1'])
-        #self.devices['DVD Player'].send_key('KEY_POWEROFF')
-
-        for name, conf in config['remotes'].items():
-            remote = RemoteControl(self, name, **conf)
-            for addr, devname in conf['devices']:
-                device = self.devices.get(devname)
-                if device:
-                    if addr in self.device_addrs:
-                        self.log("Address %d already in use, skipping %s" % (addr, devname))
-                    else:
-                        self.device_addrs[addr] = (remote, device)
-            self.remotes[name] = remote
-
-        for name, conf in config['activities'].items():
-            conf['devices'] = [(self.devices[name], input) for name, input in
-                                    conf['devices'] if name in self.devices]
-            self.activities[name] = Activity(self, name, **conf)
+        for name, conf in config['rooms'].items():
+            room = Room(self, name, **conf)
+            for addr in room.devices:
+                if addr in self.room_addrs:
+                    self.log("%s: address %d already in use in room %s, ignoring" % (name, addr, self.room_addrs[addr].name))
+                else:
+                    self.room_addrs[addr] = room
+            #self.log(room)
 
     def handle_rc6_event(self, event_name, data, kwargs):
         a = data.get('address')
         c = data.get('command')
         m = data.get('mode')
         t = data.get('toggle')
+        #self.log("EVENT %s %s %s %s" % (a, c, m, t))
 
-        #self.log("%s %s %s %s" % (a, c, m, t))
         if m != 0:
             self.log("Unexpected mode %s, expected 0" % m)
             return
 
-        if not a in self.device_addrs:
-            return
-        remote, device = self.device_addrs[a]
+        # IF SAME EVENT BUT DIFFERENT KINCONY, DROP.  NOTE may miss if intermingled with other remote?
 
-        key = remote.key(c)
-        #self.log("%s %d %s %s" % (remote.name, a, c, key))
+        key = rc6_button_names.get(c)
+        #self.log("KEY %s" % key)
 
         # ignore unknown keypress
         if not key:
@@ -464,41 +628,20 @@ class Harmony(hass.Hass):
             self.last_event = (a, c, m, t)
             self.repcnt = 0
 
+        room = self.room_addrs.get(a)
+        if not room:
+            return
+        #self.log("ROOM %s" % room.name)
+
         if key == 'KEY_POWERSHIFT':
-            self.in_device_mode = True
-            self.cur_device = a
-            self.cur_activity = None
+            room.set_device_mode(a)
             return
 
-        if key in self.activities:
-            if self.in_device_mode:
-                self.in_device_mode = False
-                self.cur_device = None
-            if self.cur_activity != key:
-                self.log("STARTING ACTIVITY %s" % key)
-                self.activities[key].start(self.activities.get(self.cur_activity))
-                self.cur_activity = key
+        if key in room.activities:
+            room.set_activity_mode(key)
             return
 
-        if not (self.cur_activity or self.cur_device):
+        if not room.active():
             return
 
-        if self.in_device_mode:
-            #if key.startswith('KEY_') and key[4] in ('1', '2', '3', '4', '5', '6', '7', '8', '9', '0'):
-            #    key = 'INPUT_' + key[4]
-            #self.log("SEND %s to device %s" % (key, self.cur_device))
-            device.send_key(key, self.repcnt)
-            return
-
-        curact = self.activities[self.cur_activity]
-        if key == 'KEY_POWER':
-            curact.stop()
-            self.cur_activity = None
-            return
-
-        if key == 'KEY_MUTE':
-            device = curact.volume_device
-        else:
-            device = curact.main_device
-        #self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
-        self.devices[device].send_key(key, self.repcnt)
+        room.send(a, key, self.repcnt)
