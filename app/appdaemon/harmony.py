@@ -12,9 +12,6 @@ from devices.vizio_tv_m656g4 import vizio_tv_m656g4_cmds
 
 LOG_LEVEL = "INFO"
 
-# Kincony
-REMOTE = 'a1e13b4a8a46c8c156cdde70ee3be970'
-REMNAME = 'web_bda758'
 
 # These (arbitrary) numbers must match the Kincony ESP config volume_up/down buttons
 IRprotocols = {
@@ -99,6 +96,8 @@ class Room(object):
         self.appdaemon = appdaemon
         self.log = appdaemon.log
         self.name = name
+        self.gw_id = kwargs['gw_id']
+        self.gw_name = kwargs['gw_name']
         self._set_devices(kwargs.get('devices', {}))
         self._set_activities(kwargs.get('activities', {}))
 
@@ -122,8 +121,8 @@ class Room(object):
             #self.log(self.activities[activity])
 
     def __str__(self):
-        return "Room: %s\n  Activities: %s\n  Devices: %s" % (
-                    self.name,
+        return "Room: %s (gw_id=%s, gw_name=%s)\n  Activities: %s\n  Devices: %s" % (
+                    self.name, self.gw_id, self.gw_name,
                     ', '.join(map(str, sorted(self.activities.keys()))),
                     ', '.join(sorted("%s (%d)" % (d.name, i) for (i, d) in self.devices.items()))
                 )
@@ -147,7 +146,7 @@ class Room(object):
         return (self.cur_activity != None or self.cur_device != None)
 
     def send(self, address, key, repcnt):
-        #print('ROOM:', self)
+        #print('SEND IN ROOM:', self)
         if self.in_device_mode:
             device = self.devices.get(address)
             if device:
@@ -232,6 +231,7 @@ class Key(object):
 
 class Device(object):
     def __init__(self, room, name, address, instance):
+        self.room = room
         self.appdaemon = room.appdaemon
         self.name = name
         self.address = address
@@ -263,7 +263,7 @@ class Device(object):
             args['address'] = self.address
         args.update(kwargs)
 
-        svc = 'esphome/esphome_%s_tx_%s' % (REMNAME, proto)
+        svc = 'esphome/esphome_%s_tx_%s' % (self.room.gw_name, proto)
         p = args.copy()
         if proto == 'pronto':
             p['data'] = '...'
@@ -440,7 +440,7 @@ class Activity(object):
         }
         settings[isinstance(vol_up.command, str) and 'up_str' or 'up_int'] = vol_up.command
         settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command
-        svc = 'esphome/esphome_%s_set_volume_control' % REMNAME
+        svc = 'esphome/esphome_%s_set_volume_control' % self.room.gw_name
         self.appdaemon.log("SET VOLUME DEVICE TO %s %s %s" % (device.name, svc, settings))
         self.appdaemon.call_service(svc, **settings)
 
@@ -449,6 +449,8 @@ class Activity(object):
 config = {
     'rooms': {
         'Upper Living Room': {
+            'gw_id': 'a1e13b4a8a46c8c156cdde70ee3be970',
+            'gw_name': 'web_bda758',
             'devices': {
                 1: ('TV', Vizio_TV_M656G4, 0xFB04),
                 2: ('Apple TV', Apple_TV_4K, "upper_living_room"),
@@ -509,6 +511,8 @@ config = {
             },
         },
         'TV Room': {
+            'gw_id': 'NOT_a1e13b4a8a46c8c156cdde70ee3be970',
+            'gw_name': 'NOT_web_bda758',
             'devices': {
                 9: ('TV', Vizio_TV_M656G4, 0xFB04),
                 10: ('Apple TV', Apple_TV_4K, "tv_room"),
@@ -582,9 +586,6 @@ class Harmony(hass.Hass):
 
         self.read_config()
 
-        self.listen_event(self.handle_rc6_event, 'esphome.receiver_rf', device_id=REMOTE)
-        self.listen_event(self.handle_rc6_event, 'esphome.receiver_ir', device_id=REMOTE)
-
     def read_config(self):
         for name, conf in config['rooms'].items():
             room = Room(self, name, **conf)
@@ -593,6 +594,8 @@ class Harmony(hass.Hass):
                     self.log("%s: address %d already in use in room %s, ignoring" % (name, addr, self.room_addrs[addr].name))
                 else:
                     self.room_addrs[addr] = room
+            self.listen_event(self.handle_rc6_event, 'esphome.receiver_rf', device_id=room.gw_id)
+            self.listen_event(self.handle_rc6_event, 'esphome.receiver_ir', device_id=room.gw_id)
             #self.log(room)
 
     def handle_rc6_event(self, event_name, data, kwargs):
