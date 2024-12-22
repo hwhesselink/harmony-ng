@@ -13,7 +13,7 @@ mkdir x
 cd x
 mkdir appdaemon	esphome
 
-rsync -e ssh -a $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/harmony.py $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/devices $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/remotes appdaemon
+rsync -e ssh -a $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/harmony.py $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/devices appdaemon
 rsync -e ssh -a $HA:/config/esphome/common $HA:/config/esphome/esphome-web-bda758.yaml esphome
 
 rm -rf appdaemon/*/__pycache__
