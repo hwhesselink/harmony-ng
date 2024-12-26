@@ -187,51 +187,51 @@ class Key(object):
     if it's a method name).
     """
     def __init__(self, proto, code):
-        self.proto = proto
+        args = {}
 
         self.descr, code = code[0], code[1]
 
         if isinstance(code, str):
             if code.startswith('0000 '):
                 # if code in Pronto format override native proto
-                self.proto = 'pronto'
+                proto = 'pronto'
             else:
-                # code may be a method name
-                self.proto = None
+                # code may be a method name, keep as-is
+                proto = None
 
-        if isinstance(code, (list, tuple)):
-            self.command = code[0]
-            self.args = code[1]
-        else:
-            self.command = code
-            self.args = {}
+        if isinstance(code, (list, tuple)) and isinstance(code[1], dict):
+            code, args = code[0], code[1]
 
-    def gen_tx_args(self):
-        """ Generate key data formatted for ESP transmit. """
-        if self.proto == None:
-            return None, self.command
-
-        proto = self.proto
+        cmdname = None
         if proto in ('jvc', 'lg', 'pronto', 'samsung', 'sony'):
             cmdname = 'data'
         elif proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
             cmdname = 'command'
         elif proto == 'pioneer':
             cmdname = 'rc_code_1'
-            self.args['repeat'] = 3
-            if isinstance(self.command, (list, tuple)):
-                self.command, command2 = self.command
-                self.args['rc_code_2'] = command2
+            args['repeat'] = 3
+            if isinstance(code, (list, tuple)):
+                code, args['rc_code_2'] = code
                 proto = 'pioneer2'
-        rv = { cmdname: self.command }
-        rv.update(self.args)
-        return proto, rv
+
+        self.proto = proto
+        self.command = code
+        self.args = args
+
+        self.espcmd = { cmdname: code }
+        self.espcmd.update(args)
+
+    def get_esp_cmd(self):
+        if self.proto == None:
+            return None, self.command
+        return self.proto, self.espcmd
 
 
 class Device(object):
     def __init__(self, room, name, address, instance):
         self.room = room
         self.appdaemon = room.appdaemon
+        self.log = room.appdaemon.log
         self.name = name
         self.address = address
         self.instance = instance
@@ -247,7 +247,7 @@ class Device(object):
     def send_key(self, key, repcnt=0, **kwargs):
         if key not in self.keys:
             return
-        proto, args = self.keys[key].gen_tx_args()
+        proto, args = self.keys[key].get_esp_cmd()
         if proto == 'pronto':
             # drop any opt. args from a native proto (e.g. sony/wait)
             kwargs = {}
@@ -262,11 +262,11 @@ class Device(object):
             args['address'] = self.address
         args.update(kwargs)
 
-        svc = 'esphome/esphome_%s_tx_%s' % (self.room.gw_name, proto)
+        svc = 'esphome/%s_tx_%s' % (self.room.gw_name, proto)
         p = args.copy()
         if proto == 'pronto':
             p['data'] = '...'
-        #self.appdaemon.log("SEND %s %s %s" % (key, svc, p))
+        self.log("SEND %s %s %s" % (key, svc, p))
         self.appdaemon.call_service(svc, **args)
 
     def power_on(self, key, repcnt):
@@ -291,11 +291,11 @@ class Apple_TV_4K(Device):
             'KEY_MENU': 'menu',
             'KEY_NEXT': 'skip_forward',
             'KEY_OK': 'select',
-            'KEY_POWEROFF': 'suspend',
-            'KEY_POWERON': 'wakeup',
+            'KEY_POWEROFF': 'turn_off',
+            'KEY_POWERON': 'turn_on',
             'KEY_PREVIOUS': 'skip_backward',
             'KEY_RIGHT': 'right',
-            'KEY_SLEEP': 'suspend',
+            'KEY_SLEEP': 'turn_off',
             'KEY_UP': 'up',
             'KEY_VOLUMEDOWN': 'volume_down',
             'KEY_VOLUMEUP': 'volume_up',
@@ -317,7 +317,15 @@ class Apple_TV_4K(Device):
         cmd = self.key_map.get(key)
         if not cmd:
             return
-        #self.appdaemon.log("atv_send REMOTE SEND %s" % cmd)
+        if key == 'KEY_POWERON':
+            self.appdaemon.log("atv_send REMOTE SEND %s to %s" % (cmd, self.remote))
+            self.appdaemon.call_service("remote/send_command", entity_id=self.remote, command=cmd)
+            time.sleep(.4)
+            self.appdaemon.log("atv_send RELOAD")
+            self.appdaemon.call_service("homeassistant/reload_config_entry", entity_id=self.player)
+            self.appdaemon.log("atv_send RELOADED")
+            return
+        #self.appdaemon.log("atv_send REMOTE SEND %s to %s" % (cmd, self.remote))
         self.appdaemon.call_service("remote/send_command", entity_id=self.remote, command=cmd)
 
     def send_key(self, key, repcnt=0, **kwargs):
@@ -378,6 +386,7 @@ class Activity(object):
     def __init__(self, room, name, **kwargs):
         self.room = room
         self.appdaemon = room.appdaemon
+        self.log = room.appdaemon.log
         self.name = name
         self.main_device = None
         self.volume_device = None
@@ -399,7 +408,7 @@ class Activity(object):
 
         for device, _ in self.devices:
             if device in to_start:
-                print("START %s" % device.name)
+                self.log("START %s" % device.name)
                 device.power_on(None, 1)
         self.set_volume_control()
 
@@ -439,7 +448,7 @@ class Activity(object):
         }
         settings[isinstance(vol_up.command, str) and 'up_str' or 'up_int'] = vol_up.command
         settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command
-        svc = 'esphome/esphome_%s_set_volume_control' % self.room.gw_name
+        svc = 'esphome/%s_set_volume_control' % self.room.gw_name
         self.appdaemon.log("SET VOLUME DEVICE TO %s %s %s" % (device.name, svc, settings))
         self.appdaemon.call_service(svc, **settings)
 
@@ -449,7 +458,7 @@ config = {
     'rooms': {
         'Upper Living Room': {
             'gw_id': 'a1e13b4a8a46c8c156cdde70ee3be970',
-            'gw_name': 'web_bda758',
+            'gw_name': 'esphome_web_bda758',
             'devices': {
                 1: ('TV', Vizio_TV_M656G4, 0xFB04),
                 2: ('Apple TV', Apple_TV_4K, "upper_living_room"),
@@ -510,8 +519,8 @@ config = {
             },
         },
         'TV Room': {
-            'gw_id': 'NOT_a1e13b4a8a46c8c156cdde70ee3be970',
-            'gw_name': 'NOT_web_bda758',
+            'gw_id': '9d97667d41c1264f6e794b3a96af88e6',
+            'gw_name': 'tv_room',
             'devices': {
                 9: ('TV', Vizio_TV_M656G4, 0xFB04),
                 10: ('Apple TV', Apple_TV_4K, "tv_room"),
@@ -522,34 +531,33 @@ config = {
             'activities': {
                 'KEY_WATCHTV': {
                     'main_device': 'Apple TV',
-                    'volume_device': 'Receiver',
+                    'volume_device': 'TV',
                     'devices': (
-                        ('TV', 'INPUT_HDMI_1'),
-                        ('Receiver', 'INPUT_4'),
+                        ('TV', 'INPUT_HDMI_2'),
                         ('Apple TV', ''),
                     )
                 },
                 'KEY_WATCHTVHELD': {
                     'main_device': 'Set Top Box',
-                    'volume_device': 'Receiver',
+                    'volume_device': 'TV',
                     'devices': (
                         ('TV', 'INPUT_HDMI_1'),
-                        ('Receiver', 'INPUT_3'),
                         ('Set Top Box', ''),
                     )
                 },
                 'KEY_LISTENTOMUSIC': {
-                    'main_device': 'Receiver',
+                    'main_device': 'CD Player',
                     'volume_device': 'Receiver',
                     'devices': (
-                        ('Receiver', 'INPUT_1'),
+                        ('Receiver', 'INPUT_CD'),
+                        ('CD Player', ''),
                     )
                 },
                 'KEY_LISTENTOMUSICHELD': {
                     'main_device': 'Receiver',
                     'volume_device': 'Receiver',
                     'devices': (
-                        ('Receiver', 'INPUT_9'),
+                        ('Receiver', 'INPUT_TUNER'),
                     )
                 },
                 'KEY_WATCHMOVIES': {
