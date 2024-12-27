@@ -1,24 +1,53 @@
 substitutions:
-  name: "living-room-gw"
-  friendly_name: Living Room
+  name: "tv-room-gw"
+  friendly_name: TV room
 
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
-  min_version: 2024.6.0
-  name_add_mac_suffix: false
-  project:
-    name: esphome.web
-    version: dev
 
 esp32:
   board: esp32dev
   framework:
     type: arduino
 
+#debug:
+
 # Enable logging
 logger:
   level: INFO
+
+# Allow Over-The-Air updates
+ota:
+  - platform: esphome
+    password: "4d06b699e1ab22e84a77c371f10c0923"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+#  use_address: 10.12.3.167
+#  use_address: 10.12.2.X
+#  ssid: !secret wifi_ssid_cfb
+#  password: !secret wifi_password_cfb
+#  use_address: 10.12.1.35
+#  ssid: !secret wifi_ssid_lpb
+#  password: !secret wifi_password_lpb
+#  manual_ip:
+#    static_ip: 10.12.3.167
+#    gateway: 10.12.3.1
+#    subnet: 255.255.255.0
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Tv-Room Fallback Hotspot"
+    password: "sVZAzRFCiRYa"
+
+# In combination with the `ap` this allows the user
+# to provision wifi credentials to the device via WiFi AP.
+captive_portal:
+
+# To have a "next url" for improv serial
+web_server:
 
 globals:
   - id: vol_proto
@@ -42,6 +71,9 @@ globals:
 
 # Enable Home Assistant API
 api:
+  encryption:
+    key: "IttDlKgBdL0uWRRewebjoRxwSzEXhEcMqacyEvfLmrY="
+
   actions:
     - action: set_volume_control
       variables:
@@ -219,53 +251,6 @@ api:
               command: !lambda 'return command;'
           - delay: !lambda "return wait;"
 
-
-# Allow Over-The-Air updates
-ota:
-- platform: esphome
-
-#improv_serial:
-
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-#  use_address: 10.12.3.168
-#  use_address: 10.12.2.42
-#  ssid: !secret wifi_ssid_cfb
-#  password: !secret wifi_password_cfb
-#  use_address: 10.12.1.30
-#  ssid: !secret wifi_ssid_lpb
-#  password: !secret wifi_password_lpb
-#  manual_ip:
-#    static_ip: 10.12.1.30
-#    gateway: 10.12.1.1
-#    subnet: 255.255.255.0
-  # Set up a wifi access point
-  ap: {}
-
-#captive_portal:
-
-#dashboard_import:
-#  package_import_url: github://esphome/example-configs/esphome-web/esp32.yaml@main
-#  import_full_config: true
-
-# Sets up Bluetooth LE (Only on ESP32) to allow the user
-# to provision wifi credentials to the device.
-#esp32_improv:
-#  authorizer: none
-
-# To have a "next url" for improv serial
-web_server:
-
-#debug:
-
-#text_sensor:
-#  - platform: debug
-#    device:
-#      name: "Device Info"
-#    reset_reason:
-#      name: "Reset Reason"
-
 remote_transmitter:
   - id: transmitter_ir
     pin: GPIO2
@@ -284,7 +269,7 @@ binary_sensor:
     internal: true
     name: "RC6 Vol+"
     rc6:
-      address: 1
+      address: 9
       command: 0x10
     on_press:
       - button.press: volume_up
@@ -293,7 +278,7 @@ binary_sensor:
     internal: true
     name: "RC6 Vol-"
     rc6:
-      address: 1
+      address: 9
       command: 0x11
     on_press:
       - button.press: volume_down

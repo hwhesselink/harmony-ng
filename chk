@@ -14,7 +14,7 @@ cd x
 mkdir appdaemon	esphome
 
 rsync -e ssh -a $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/harmony.py $HA:/addon_configs/a0d7b954_appdaemon/apps/harmony-ng/devices appdaemon
-rsync -e ssh -a $HA:/config/esphome/common $HA:/config/esphome/esphome-web-bda758.yaml esphome
+rsync -e ssh -a $HA:/config/esphome/common $HA:/config/esphome/living-room-gw.yaml $HA:/config/esphome/tv-room-gw.yaml esphome
 
 rm -rf appdaemon/*/__pycache__
 rm -f appdaemon/devices/{pi6,pia,xx}

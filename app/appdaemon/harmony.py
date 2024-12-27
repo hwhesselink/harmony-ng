@@ -206,6 +206,9 @@ class Key(object):
         cmdname = None
         if proto in ('jvc', 'lg', 'pronto', 'samsung', 'sony'):
             cmdname = 'data'
+            if proto == 'jvc':
+                args['repeat'] = 3
+                args['wait'] = .05
         elif proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
             cmdname = 'command'
         elif proto == 'pioneer':
@@ -302,9 +305,10 @@ class Device(object):
         return svc, args
 
     def send_key(self, key, repcnt=0, **kwargs):
-        svc, args = self.gen_key_svc(key, repcnt, **kwargs)
-        if not svc:
+        sa = self.gen_key_svc(key, repcnt, **kwargs)
+        if not sa:
             return
+        svc, args = sa
         p = args.copy()
         d = p.get('data')
         if isinstance(d, str) and len(d) > 50:
@@ -578,7 +582,7 @@ config = {
         },
         'TV Room': {
             'gw_id': '9d97667d41c1264f6e794b3a96af88e6',
-            'gw_name': 'tv_room',
+            'gw_name': 'tv_room_gw',
             'devices': {
                 9: ('TV', Vizio_TV_M656G4, 0xFB04),
                 10: ('Apple TV', Apple_TV_4K, "tv_room"),
@@ -621,10 +625,9 @@ config = {
                 },
                 'KEY_WATCHMOVIES': {
                     'main_device': 'DVD Player',
-                    'volume_device': 'Receiver',
+                    'volume_device': 'TV',
                     'devices': (
-                        ('TV', 'INPUT_HDMI_1'),
-                        ('Receiver', 'INPUT_2'),
+                        ('TV', 'INPUT_COMPONENT_1'),
                         ('DVD Player', ''),
                     )
                 },
