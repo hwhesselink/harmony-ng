@@ -228,6 +228,39 @@ class Key(object):
         return self.proto, self.espcmd
 
 
+class ServiceCallSequence(object):
+    def __init__(self, appdaemon):
+        self.appdaemon = appdaemon
+        self.log = appdaemon.log
+        self.power_on_delay = 0
+        self.commands = []
+
+    def add(self, svc_data, device=None):
+        if not svc_data:
+            return
+        if not isinstance(svc_data, (list, tuple)):
+            # must be one or more instances of (svc, data)
+            return
+        if not isinstance(svc_data[0], (list, tuple)):
+            # if single instance, make list
+            svc_data = [svc_data]
+        for sa in svc_data:
+            svc, args = sa
+            self.commands.append({ svc: args })
+            if device:
+                # keep track of maximum power-on delay
+                self.power_on_delay = max(self.power_on_delay, device.power_on_delay)
+
+    def add_wait(self):
+        if self.power_on_delay:
+            self.commands.append({ 'sleep': self.power_on_delay })
+        self.power_on_delay = 0
+
+    def send(self):
+        self.log('ServiceCallSequence SEND')
+        self.appdaemon.run_sequence(self.commands)
+
+
 class Device(object):
     def __init__(self, room, name, address, instance):
         self.room = room
@@ -236,6 +269,9 @@ class Device(object):
         self.name = name
         self.address = address
         self.instance = instance
+        self.power_on_delay = 0
+        self.input_delay = 0
+        self.inter_device_delay = 0
         self.vol_repeats = 1
         self.vol_repeat_wait = 0
         self.keys = {}
@@ -245,9 +281,9 @@ class Device(object):
     def __str__(self):
         return "Device %s" % self.name
 
-    def send_key(self, key, repcnt=0, **kwargs):
+    def gen_key_svc(self, key, repcnt=0, **kwargs):
         if key not in self.keys:
-            return
+            return None
         proto, args = self.keys[key].get_esp_cmd()
         if proto == 'pronto':
             # drop any opt. args from a native proto (e.g. sony/wait)
@@ -256,31 +292,40 @@ class Device(object):
             f = getattr(self, args, None)
             if f != None and callable(f):
                 # args is a method, call it
-                f(key, repcnt)
-                return
+                return f(key, repcnt)
 
         if proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
             args['address'] = self.address
         args.update(kwargs)
 
         svc = 'esphome/%s_tx_%s' % (self.room.gw_name, proto)
+        return svc, args
+
+    def send_key(self, key, repcnt=0, **kwargs):
+        svc, args = self.gen_key_svc(key, repcnt, **kwargs)
+        if not svc:
+            return
         p = args.copy()
-        if proto == 'pronto':
-            p['data'] = '...'
-        self.log("SEND %s %s %s" % (key, svc, p))
+        d = p.get('data')
+        if isinstance(d, str) and len(d) > 50:
+            p['data'] = d[:45].strip() + ' ... '
+        #self.log("SEND %s %s %s" % (key, svc, p))
         self.appdaemon.call_service(svc, **args)
 
     def power_on(self, key, repcnt):
-        self.send_key('KEY_POWERON')
+        return self.gen_key_svc('KEY_POWERON')
 
     def power_off(self, key, repcnt):
-        self.send_key('KEY_POWEROFF')
+        return self.gen_key_svc('KEY_POWEROFF')
 
 class Vizio_TV_M656G4(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'nec'
         self.commands = vizio_tv_m656g4
         super().__init__(room, name, address, instance)
+        self.power_on_delay = 8
+        self.input_delay = 0
+        self.inter_device_delay = 0.5
 
 class Apple_TV_4K(Device):
     key_map = {
@@ -308,39 +353,41 @@ class Apple_TV_4K(Device):
         self.remote = 'remote.' + address
         self.player = 'media_player.' + address
         super().__init__(room, name, address, instance)
+        self.power_on_delay = 1.5
+        self.input_delay = 0
+        self.inter_device_delay = 0.5
 
     def atv_send(self, key, repcnt):
         #self.appdaemon.log("atv_send KEY %s, STATE %s" % (key, self.appdaemon.get_state(self.player)))
         if key == 'KEY_OK' and self.appdaemon.get_state(self.player) not in ('idle', 'standby'):
             # if playing/paused override OK key to toggle play/pause
-            self.send_key('KEY_PLAY', repcnt)
-            return
+            return self.gen_key_svc('KEY_PLAY', repcnt)
         cmd = self.key_map.get(key)
         if not cmd:
-            return
+            return None
         if key == 'KEY_POWERON':
-            self.appdaemon.log("atv_send REMOTE SEND %s to %s" % (cmd, self.remote))
-            self.appdaemon.call_service("remote/send_command", entity_id=self.remote, command=cmd)
-            time.sleep(.4)
-            self.appdaemon.log("atv_send RELOAD")
-            self.appdaemon.call_service("homeassistant/reload_config_entry", entity_id=self.player)
-            self.appdaemon.log("atv_send RELOADED")
-            return
+            return [("remote/send_command", { 'entity_id': self.remote, 'command': cmd }),
+                   ("homeassistant/reload_config_entry", { 'entity_id': self.player })]
         #self.appdaemon.log("atv_send REMOTE SEND %s to %s" % (cmd, self.remote))
-        self.appdaemon.call_service("remote/send_command", entity_id=self.remote, command=cmd)
+        return "remote/send_command", { 'entity_id': self.remote, 'command': cmd }
 
+    '''
     def send_key(self, key, repcnt=0, **kwargs):
         # 'wait' empirically determined for urc3680...
         if repcnt:
             super().send_key(key, wait=115)
         else:
             super().send_key(key, wait=10)
+    '''
 
 class Cisco_STB_8742(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'pronto'
         self.commands = cisco_stb_8742
         super().__init__(room, name, address, instance)
+        self.power_on_delay = 1.5
+        self.input_delay = 0
+        self.inter_device_delay = 0.5
 
 class Denon_AVR_S760(Device):
     def __init__(self, room, name, address, instance=0):
@@ -365,14 +412,11 @@ class Panasonic_DVD_S700(Device):
     # The S700 is a TOAD, these emulate the missing power funcs
     def power_on(self, key, repcnt):
         # Eject is not perfect but mostly does the right thing
-        self.send_key('KEY_EJECT')
+        return self.gen_key_svc('KEY_EJECT')
 
     def power_off(self, key, repcnt):
         if 'KEY_PLAY' in self.keys and 'KEY_POWER' in self.keys:
-            self.send_key('KEY_PLAY')
-            # need to use asyncio for this eventually
-            time.sleep(.4)
-            self.send_key('KEY_POWER')
+            return (self.gen_key_svc('KEY_PLAY'), self.gen_key_svc('KEY_POWER'))
 
 class Pioneer_PD_M_6_Disc_Changer(Device):
     def __init__(self, room, name, address, instance=0):
@@ -413,35 +457,42 @@ class Activity(object):
             to_start = to_start - running
             cur_activity.stop(to_stop)
 
+        start_cmds = ServiceCallSequence(self.appdaemon)
+
         for device, _ in self.devices:
             if device in to_start:
                 self.log("START %s" % device.name)
-                device.power_on(None, 1)
-        self.set_volume_control()
+                start_cmds.add(device.power_on(None, 1), device)
+        start_cmds.add(self.set_volume_control())
+        start_cmds.add_wait()
 
         for device, input in self.devices:
             if input:
                 print("SET %s INPUT TO %s" % (device.name, input))
-                device.send_key(input)
+                start_cmds.add(device.gen_key_svc(input))
+
+        start_cmds.send()
 
     def stop(self, to_stop=None):
+        stop_cmds = ServiceCallSequence(self.appdaemon)
         for device, _ in reversed(self.devices):
             if to_stop == None or device in to_stop:
                 print("STOP %s" % device.name)
-                device.power_off(None, 1)
+                stop_cmds.add(device.power_off(None, 1))
+        stop_cmds.send()
 
     def set_volume_control(self):
         device = self.volume_device
         if not device:
-            return
+            return None
         vol_up = device.keys['KEY_VOLUMEUP']
         vol_down = device.keys['KEY_VOLUMEDOWN']
         if vol_up.proto != vol_down.proto:
             self.log("Proto mismatch between volume UP and DOWN")
-            return
+            return None
         if vol_up.proto == None:
             self.log("Volume command cannot be method in set_volume_control()")
-            return
+            return None
         settings = {
             'proto': IRprotocols[vol_up.proto],
             'address': device.address,
@@ -457,7 +508,7 @@ class Activity(object):
         settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command
         svc = 'esphome/%s_set_volume_control' % self.room.gw_name
         self.appdaemon.log("SET VOLUME DEVICE TO %s %s %s" % (device.name, svc, settings))
-        self.appdaemon.call_service(svc, **settings)
+        return svc, settings
 
 
 # The 'devices' number must match the RC-6 address sent by the remote(s)
@@ -625,6 +676,7 @@ class Harmony(hass.Hass):
             return
 
         # IF SAME EVENT BUT DIFFERENT KINCONY, DROP.  NOTE may miss if intermingled with other remote?
+        # something here
 
         key = rc6_button_names.get(c)
         #self.log("KEY %s" % key)
