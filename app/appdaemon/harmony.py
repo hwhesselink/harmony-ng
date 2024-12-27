@@ -5,6 +5,7 @@ import asyncio, time
 from devices.apple import sony_cmds_for_atv
 from devices.cisco import cisco_stb_8742
 from devices.denon import denon_avr_s760
+from devices.jvc import jvc_dvd_cmds
 from devices.panasonic import panasonic_dvd_s700
 from devices.pioneer import pioneer_pdm_6_disc, pioneer_vsx_4500s
 from devices.vizio import vizio_tv_m656g4
@@ -349,6 +350,12 @@ class Denon_AVR_S760(Device):
         self.vol_repeats = 2
         self.vol_repeat_wait = 5
 
+class JVC_DVD(Device):
+    def __init__(self, room, name, address, instance=0):
+        self.proto = 'jvc'
+        self.commands = jvc_dvd_cmds
+        super().__init__(room, name, address, instance)
+
 class Panasonic_DVD_S700(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'panasonic'
@@ -527,6 +534,7 @@ config = {
                 11: ('Set Top Box', Cisco_STB_8742, 0),
                 13: ('Receiver', Pioneer_VSX_4500S, 0),
                 14: ('CD Player', Pioneer_PD_M_6_Disc_Changer, 0),
+                15: ('DVD Player', JVC_DVD, 0),
             },
             'activities': {
                 'KEY_WATCHTV': {

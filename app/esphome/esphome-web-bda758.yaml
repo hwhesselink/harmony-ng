@@ -159,6 +159,18 @@ api:
                   data: !lambda 'return data;'
                   nbits: !lambda 'return nbits;'
               - delay: !lambda "return wait;"
+    - action: tx_jvc
+      variables:
+        data: int
+        repeat: int
+        wait: int
+      then:
+        - repeat:
+            count: !lambda 'return repeat;'
+            then:
+              - remote_transmitter.transmit_jvc:
+                  data: !lambda 'return data;'
+              - delay: !lambda "return wait;"
     - action: tx_lg
       variables:
         data: int
