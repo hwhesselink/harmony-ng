@@ -1,6 +1,6 @@
-[I'll be adding a proper readme/user guide soon!  In the meantime see the [Architecture](/docs/architecture.md) page]
+[I'll be adding a proper readme/user guide soon.  In the meantime see the [Architecture](/docs/architecture.md) page]
 
-This is a replacement for the Logitech Harmony Hub, which has been discontinued.  
+This is a replacement for the Logitech Harmony Hub activity-based remote, which has been discontinued.  
 It works well and I've retired the original Hub.
 
 I'm using it with a:
@@ -27,4 +27,4 @@ It is trivial to add a device if its IR codes are known, slightly more work if t
 
 Any remote that puts out Philips RC-6 IR can be used but the JP1.x programmable universal ones with activity buttons are ideal.
 
-The code runs in [Appdaemon](https://appdaemon.readthedocs.io/en/latest) and the gateway is configured using [ESPHome](https://esphome.io/index.html).  I have Appdaemon and ESPHome running in my Home Assistant which makes integration and interaction a breeze.  If you don't have Home Assistant (you should😃!) both can run standalone.  Alternatively you can install Home Assistant on a RaspberryPi (minimum 3B) just for this.
+The code runs in [Appdaemon](https://appdaemon.readthedocs.io/en/latest) and the gateway is configured using [ESPHome](https://esphome.io/index.html), both in Home Assistant.  If you don't have Home Assistant it is a trivial install on a RaspberryPi (minimum 3B).
