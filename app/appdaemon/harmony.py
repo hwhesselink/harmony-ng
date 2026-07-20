@@ -2,12 +2,15 @@ import hassapi as hass
 
 import asyncio, time
 
+from remotes import rca_rcr313be
+
 from devices.apple import sony_cmds_for_atv
 from devices.cisco import cisco_stb_8742
 from devices.denon import denon_avr_s760
 from devices.jvc import jvc_dvd_cmds
+from devices.nec import nec_atlona_at_hd580
 from devices.panasonic import panasonic_dvd_s700
-from devices.pioneer import pioneer_pdm_6_disc, pioneer_vsx_4500s
+from devices.pioneer import pioneer_pdm_6_disc, pioneer_ctw510_dual_tape
 from devices.vizio import vizio_tv_m656g4
 
 LOG_LEVEL = "INFO"
@@ -121,7 +124,7 @@ class Room(object):
             #self.log(self.activities[activity])
 
     def __str__(self):
-        return "Room: %s (gw_id=%s, gw_name=%s)\n  Activities: %s\n  Devices: %s" % (
+        return "%s (gw_id=%s, gw_name=%s)\n  Activities: %s\n  Devices: %s" % (
                     self.name, self.gw_id, self.gw_name,
                     ', '.join(map(str, sorted(self.activities.keys()))),
                     ', '.join(sorted("%s (%d)" % (d.name, i) for (i, d) in self.devices.items()))
@@ -146,7 +149,7 @@ class Room(object):
         return (self.cur_activity != None or self.cur_device != None)
 
     def send(self, address, key, repcnt):
-        #print('SEND IN ROOM:', self)
+        self.log("SEND IN ROOM: %s" % self)
         if self.in_device_mode:
             device = self.devices.get(address)
             if device:
@@ -162,7 +165,7 @@ class Room(object):
             device = self.cur_activity.volume_device
         else:
             device = self.cur_activity.main_device
-        #self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
+        self.log("SEND %s to %s in %s" % (key, device, self.cur_activity))
         device.send_key(key, repcnt)
 
 
@@ -207,13 +210,13 @@ class Key(object):
         if proto in ('jvc', 'lg', 'pronto', 'samsung', 'sony'):
             cmdname = 'data'
             if proto == 'jvc':
-                args['repeat'] = 3
-                args['wait'] = .05
+                args['repeat'] = 2
+                args['wait'] = 0
         elif proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
             cmdname = 'command'
         elif proto == 'pioneer':
             cmdname = 'rc_code_1'
-            args['repeat'] = 3
+            args['repeat'] = 1
             if isinstance(code, (list, tuple)):
                 code, args['rc_code_2'] = code
                 proto = 'pioneer2'
@@ -231,12 +234,25 @@ class Key(object):
         return self.proto, self.espcmd
 
 
+    def __str__(self):
+        return "Room: %s (gw_id=%s, gw_name=%s)\n  Activities: %s\n  Devices: %s" % (
+                    self.name, self.gw_id, self.gw_name,
+                    ', '.join(map(str, sorted(self.activities.keys()))),
+                    ', '.join(sorted("%s (%d)" % (d.name, i) for (i, d) in self.devices.items()))
+                )
+
 class ServiceCallSequence(object):
     def __init__(self, appdaemon):
         self.appdaemon = appdaemon
         self.log = appdaemon.log
         self.power_on_delay = 0
         self.commands = []
+
+    def __str__(self):
+        return "ServiceCallSequence (power_on_delay: %d)\n  Commands:\n    %s" % (
+                    self.power_on_delay,
+                    '\n    '.join(map(str, self.commands))
+                )
 
     def add(self, svc_data, device=None):
         if not svc_data:
@@ -250,6 +266,7 @@ class ServiceCallSequence(object):
         for sa in svc_data:
             svc, args = sa
             self.commands.append({ svc: args })
+            self.commands.append({ 'sleep': 0.25 })
             if device:
                 # keep track of maximum power-on delay
                 self.power_on_delay = max(self.power_on_delay, device.power_on_delay)
@@ -260,7 +277,8 @@ class ServiceCallSequence(object):
         self.power_on_delay = 0
 
     def send(self):
-        self.log('ServiceCallSequence SEND')
+        self.log('SEND ServiceCallSequence')
+        print(self.commands)
         self.appdaemon.run_sequence(self.commands)
 
 
@@ -292,9 +310,11 @@ class Device(object):
             # drop any opt. args from a native proto (e.g. sony/wait)
             kwargs = {}
         elif proto == None:
+            self.log("%s IS METHOD %s?" % (key, str(args)))
             f = getattr(self, args, None)
             if f != None and callable(f):
                 # args is a method, call it
+                self.log("IS METHOD")
                 return f(key, repcnt)
 
         if proto in ('nec', 'panasonic', 'rc5', 'rc6', 'samsung36'):
@@ -313,7 +333,7 @@ class Device(object):
         d = p.get('data')
         if isinstance(d, str) and len(d) > 50:
             p['data'] = d[:45].strip() + ' ... '
-        #self.log("SEND %s %s %s" % (key, svc, p))
+        self.log("SEND %s %s %s" % (key, svc, p))
         self.appdaemon.call_service(svc, **args)
 
     def power_on(self, key, repcnt):
@@ -352,8 +372,8 @@ class Apple_TV_4K(Device):
     }
 
     def __init__(self, room, name, address, instance=0):
-        self.proto = 'sony'
-        self.commands = sony_cmds_for_atv
+        self.proto = 'pronto'
+        self.commands = {}
         self.remote = 'remote.' + address
         self.player = 'media_player.' + address
         super().__init__(room, name, address, instance)
@@ -362,27 +382,27 @@ class Apple_TV_4K(Device):
         self.inter_device_delay = 0.5
 
     def atv_send(self, key, repcnt):
-        #self.appdaemon.log("atv_send KEY %s, STATE %s" % (key, self.appdaemon.get_state(self.player)))
-        if key == 'KEY_OK' and self.appdaemon.get_state(self.player) not in ('idle', 'standby'):
-            # if playing/paused override OK key to toggle play/pause
-            return self.gen_key_svc('KEY_PLAY', repcnt)
+        ad = self.appdaemon
         cmd = self.key_map.get(key)
         if not cmd:
             return None
-        if key == 'KEY_POWERON':
-            return [("remote/send_command", { 'entity_id': self.remote, 'command': cmd }),
-                   ("homeassistant/reload_config_entry", { 'entity_id': self.player })]
-        #self.appdaemon.log("atv_send REMOTE SEND %s to %s" % (cmd, self.remote))
+        ad.log("atv_send REMOTE SEND %s to %s" % (cmd, self.remote))
         return "remote/send_command", { 'entity_id': self.remote, 'command': cmd }
 
-    '''
-    def send_key(self, key, repcnt=0, **kwargs):
-        # 'wait' empirically determined for urc3680...
-        if repcnt:
-            super().send_key(key, wait=115)
-        else:
-            super().send_key(key, wait=10)
-    '''
+class Atlona_AT_HD580(Device):
+    def __init__(self, room, name, address, instance=0):
+        self.proto = 'nec'
+        self.commands = nec_atlona_at_hd580
+        super().__init__(room, name, address, instance)
+        self.entity_id = self.appdaemon.get_entity("switch.atlona_video_processor_power_relay")
+
+    def power_on(self, key, repcnt):
+        self.entity_id.call_service("turn_on")
+        return None
+
+    def power_off(self, key, repcnt):
+        self.entity_id.call_service("turn_off")
+        return None
 
 class Cisco_STB_8742(Device):
     def __init__(self, room, name, address, instance=0):
@@ -398,14 +418,16 @@ class Denon_AVR_S760(Device):
         self.proto = 'panasonic'
         self.commands = denon_avr_s760
         super().__init__(room, name, address, instance)
-        self.vol_repeats = 2
-        self.vol_repeat_wait = 5
+        self.vol_repeats = 1
 
 class JVC_DVD(Device):
     def __init__(self, room, name, address, instance=0):
         self.proto = 'jvc'
         self.commands = jvc_dvd_cmds
         super().__init__(room, name, address, instance)
+        self.power_on_delay = 8
+        self.input_delay = 0
+        self.inter_device_delay = 0.5
 
 class Panasonic_DVD_S700(Device):
     def __init__(self, room, name, address, instance=0):
@@ -427,6 +449,36 @@ class Pioneer_PD_M_6_Disc_Changer(Device):
         self.proto = 'pioneer'
         self.commands = pioneer_pdm_6_disc
         super().__init__(room, name, address, instance)
+
+class Pioneer_CW_W510_Dual_Cassette_Deck(Device):
+    def __init__(self, room, name, address, instance=0):
+        self.proto = 'pioneer'
+        self.commands = pioneer_ctw510_dual_tape
+        super().__init__(room, name, address, instance)
+        self.entity_id = self.appdaemon.get_entity("switch.pioneer_dual_tapedeck_power_relay")
+
+    def power_on(self, key, repcnt):
+        self.entity_id.call_service("turn_on")
+        return self.gen_key_svc('KEY_POWERON')
+
+    def power_off(self, key, repcnt):
+        self.entity_id.call_service("turn_off")
+        return self.gen_key_svc('KEY_POWERON')
+
+class Sony_Record_Player(Device):
+    def __init__(self, room, name, address, instance=0):
+        self.proto = 'pronto'
+        self.commands = {}
+        super().__init__(room, name, address, instance)
+        self.entity_id = self.appdaemon.get_entity("switch.sony_record_player_power_relay")
+
+    def power_on(self, key, repcnt):
+        self.entity_id.call_service("turn_on")
+        return None
+
+    def power_off(self, key, repcnt):
+        self.entity_id.call_service("turn_off")
+        return None
 
 class Pioneer_VSX_4500S(Device):
     def __init__(self, room, name, address, instance=0):
@@ -511,7 +563,7 @@ class Activity(object):
         settings[isinstance(vol_up.command, str) and 'up_str' or 'up_int'] = vol_up.command
         settings[isinstance(vol_down.command, str) and 'down_str' or 'down_int'] = vol_down.command
         svc = 'esphome/%s_set_volume_control' % self.room.gw_name
-        self.appdaemon.log("SET VOLUME DEVICE TO %s %s %s" % (device.name, svc, settings))
+        #self.appdaemon.log("SET VOLUME DEVICE TO %s %s %s" % (device.name, svc, settings))
         return svc, settings
 
 
@@ -585,58 +637,92 @@ config = {
             'gw_name': 'tv_room_gw',
             'devices': {
                 9: ('TV', Vizio_TV_M656G4, 0xFB04),
-                10: ('Apple TV', Apple_TV_4K, "tv_room"),
-                11: ('Set Top Box', Cisco_STB_8742, 0),
-                13: ('Receiver', Pioneer_VSX_4500S, 0),
-                14: ('CD Player', Pioneer_PD_M_6_Disc_Changer, 0),
-                15: ('DVD Player', JVC_DVD, 0),
+                10: ('Apple TV', Apple_TV_4K, "tv_room_apple_tv"),
+                11: ('Receiver', Denon_AVR_S760, 0x2A4C),
+                12: ('VHS Player', JVC_DVD, 0),
+                13: ('Cassette Player', Pioneer_CW_W510_Dual_Cassette_Deck, 0),
+                14: ('DVD Player', Panasonic_DVD_S700, 0x4004),
+                15: ('CD Player', Pioneer_PD_M_6_Disc_Changer, 0),
+                100000: ('Record Player', Sony_Record_Player, 0),
+                100001: ('Video Processor', Atlona_AT_HD580, 0x7F80),
+                100002: ('Cassette Player IR passthrough', Pioneer_PD_M_6_Disc_Changer, 0),
             },
             'activities': {
+                # Tuner
                 'KEY_WATCHTV': {
-                    'main_device': 'Apple TV',
-                    'volume_device': 'TV',
+                    'main_device': 'Receiver',
+                    'volume_device': 'Receiver',
                     'devices': (
-                        ('TV', 'INPUT_HDMI_2'),
-                        ('Apple TV', ''),
+                        ('Receiver', 'INPUT_9'),
                     )
                 },
-                'KEY_WATCHTVHELD': {
-                    'main_device': 'Set Top Box',
-                    'volume_device': 'TV',
-                    'devices': (
-                        ('TV', 'INPUT_HDMI_1'),
-                        ('Set Top Box', ''),
-                    )
-                },
+#                'KEY_WATCHTVHELD': {
+#                    'main_device': 'DVD Player',
+#                    'volume_device': 'Receiver',
+#                    'devices': (
+#                        ('Receiver', 'INPUT_2'),
+#                        ('DVD Player', ''),
+#                    )
+#                },
+#                'KEY_WATCHTVSHIFT': {
+#                    'main_device': 'DVD Player',
+#                    'volume_device': 'TV',
+#                    'devices': (
+#                        ('TV', 'INPUT_COMPONENT_1'),
+#                        ('DVD Player', ''),
+#                    )
+#                },
                 'KEY_LISTENTOMUSIC': {
                     'main_device': 'CD Player',
                     'volume_device': 'Receiver',
                     'devices': (
-                        ('Receiver', 'INPUT_CD'),
+                        ('Receiver', 'INPUT_2'),
                         ('CD Player', ''),
                     )
                 },
                 'KEY_LISTENTOMUSICHELD': {
-                    'main_device': 'Receiver',
+                    'main_device': 'Cassette Player',
                     'volume_device': 'Receiver',
                     'devices': (
-                        ('Receiver', 'INPUT_TUNER'),
+                        ('Receiver', 'INPUT_1'),
+                        ('Cassette Player', ''),
+                        ('Cassette Player IR passthrough', ''),
+                    )
+                },
+                'KEY_LISTENTOMUSICSHIFT': {
+                    'main_device': 'Record Player',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('Receiver', 'INPUT_7'),
+                        ('Record Player', ''),
                     )
                 },
                 'KEY_WATCHMOVIES': {
-                    'main_device': 'DVD Player',
-                    'volume_device': 'TV',
+                    'main_device': 'Apple TV',
+                    'volume_device': 'Receiver',
                     'devices': (
-                        ('TV', 'INPUT_COMPONENT_1'),
-                        ('DVD Player', ''),
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_5'),
+                        ('Apple TV', ''),
                     )
                 },
                 'KEY_WATCHMOVIESHELD': {
                     'main_device': 'DVD Player',
                     'volume_device': 'Receiver',
                     'devices': (
-                        ('Receiver', 'INPUT_2'),
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_4'),
                         ('DVD Player', ''),
+                    )
+                },
+                'KEY_WATCHMOVIESSHIFT': {
+                    'main_device': 'VHS Player',
+                    'volume_device': 'Receiver',
+                    'devices': (
+                        ('TV', 'INPUT_HDMI_1'),
+                        ('Receiver', 'INPUT_3'),
+                        ('VHS Player', ''),
+                        ('Video Processor', ''),
                     )
                 },
             },

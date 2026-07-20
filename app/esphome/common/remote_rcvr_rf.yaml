@@ -48,8 +48,16 @@ remote_receiver:
       then:
         - if:
             condition:
-              lambda: "return !(x.command == 0x10 || x.command == 0x11);"
+              lambda: "return (x.command == 0x10 || x.command == 0x11);"
             then:
+              - if:
+                  condition:
+                    lambda: "return (x.command == 0x10);"
+                  then:
+                    - button.press: volume_up
+                  else:
+                    - button.press: volume_down
+            else:
               - homeassistant.event:
                   event: esphome.receiver_rf
                   data_template:

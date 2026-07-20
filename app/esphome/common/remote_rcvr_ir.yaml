@@ -16,7 +16,7 @@ remote_receiver:
     filter: 400us
 #    memory_blocks: 8
 #    dump: all
-#    dump:
+    dump:
 #    - abbwelcome
 #    - aeha
 #    - byronsx
@@ -39,7 +39,7 @@ remote_receiver:
 #    - pronto
 #    - raw
 #    - rc5
-#    - rc6
+    - rc6
 #    - rc_switch
 #    - roomba
 #    - samsung
@@ -47,27 +47,51 @@ remote_receiver:
 #    - sony
 #    - toshiba_ac
 #    - mirage
-#    on_sony:
+#    on_jvc:
 #      then:
-#      - homeassistant.event:
-#          event: esphome.receiver_ir
-#          data_template: 
-#            rcv: "IR - SONY"
-#            data: !lambda "return x.data;"
-#            nbits: !lambda "return x.nbits;"
+#        - homeassistant.event:
+#            event: esphome.receiver_ir
+#            data_template:
+#              rcv: "IR - JVC"
+#              data: !lambda "return x.data;"
+#    on_nec:
+#      then:
+#        - homeassistant.event:
+#            event: esphome.receiver_ir
+#            data_template:
+#              rcv: "IR - NEC"
+#              address: !lambda "return x.address;"
+#              command: !lambda "return x.command;"
+#              command_repeats: !lambda "return x.command_repeats;"
 #    on_panasonic:
 #      then:
 #      - homeassistant.event:
 #          event: esphome.receiver_ir
-#          data_template: 
+#          data_template:
 #            rcv: "IR - PANA"
 #            command: !lambda "return x.command;"
 #           address: !lambda "return x.address;"
-#    on_rc6:
+#    on_pioneer:
+#      then:
+#        - homeassistant.event:
+#            event: esphome.receiver_ir
+#            data_template:
+#              rcv: "IR - PIONEER"
+#              rc_code_1: !lambda "return x.rc_code_1;"
+#              rc_code_2: !lambda "return x.rc_code_2;"
+    on_rc6:
+      then:
+      - homeassistant.event:
+          event: esphome.receiver_ir
+          data_template:
+            rcv: "IR - RC6"
+            command: !lambda "return x.command;"
+            address: !lambda "return x.address;"
+#    on_sony:
 #      then:
 #      - homeassistant.event:
 #          event: esphome.receiver_ir
-#          data_template: 
-#            rcv: "IR - RC6"
-#            command: !lambda "return x.command;"
-#            address: !lambda "return x.address;"
+#          data_template:
+#            rcv: "IR - SONY"
+#            data: !lambda "return x.data;"
+#            nbits: !lambda "return x.nbits;"

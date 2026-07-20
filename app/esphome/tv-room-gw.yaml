@@ -1,53 +1,23 @@
 substitutions:
-  name: "tv-room-gw"
-  friendly_name: TV room
+  name: tv-room-gw
+  friendly_name: TV Room
 
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
+  min_version: 2026.4.0
+  name_add_mac_suffix: false
 
 esp32:
-  board: esp32dev
+  variant: esp32
   framework:
-    type: arduino
-
-#debug:
+    type: esp-idf
+    advanced:
+      minimum_chip_revision: 3.1
+      sram1_as_iram: true
 
 # Enable logging
 logger:
-  level: INFO
-
-# Allow Over-The-Air updates
-ota:
-  - platform: esphome
-    password: "4d06b699e1ab22e84a77c371f10c0923"
-
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-#  use_address: 10.12.3.167
-#  use_address: 10.12.2.X
-#  ssid: !secret wifi_ssid_cfb
-#  password: !secret wifi_password_cfb
-#  use_address: 10.12.1.35
-#  ssid: !secret wifi_ssid_lpb
-#  password: !secret wifi_password_lpb
-#  manual_ip:
-#    static_ip: 10.12.3.167
-#    gateway: 10.12.3.1
-#    subnet: 255.255.255.0
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
-  ap:
-    ssid: "Tv-Room Fallback Hotspot"
-    password: "sVZAzRFCiRYa"
-
-# In combination with the `ap` this allows the user
-# to provision wifi credentials to the device via WiFi AP.
-captive_portal:
-
-# To have a "next url" for improv serial
-web_server:
 
 globals:
   - id: vol_proto
@@ -69,11 +39,19 @@ globals:
   - id: vol_repeat_wait
     type: int
 
+remote_transmitter:
+  - id: transmitter_ir
+    pin:
+      number: GPIO2
+      ignore_strapping_warning: true
+    carrier_duty_percent: 50%
+    non_blocking: true
+
 # Enable Home Assistant API
 api:
+  # batch_delay: 0ms  # Send state changes immediately
   encryption:
-    key: "IttDlKgBdL0uWRRewebjoRxwSzEXhEcMqacyEvfLmrY="
-
+    key: !secret tv_room_gw__api_key
   actions:
     - action: set_volume_control
       variables:
@@ -114,37 +92,11 @@ api:
         - globals.set:
             id: vol_repeat_wait
             value: !lambda "return repeat_wait;"
-    - action: pana_vup
-      then:
-        - remote_transmitter.transmit_panasonic:
-            address: 0x2A4C
-            command: 0x0280E86A
-        - delay: !lambda "return 1;"
-        - remote_transmitter.transmit_panasonic:
-            address: 0x2A4C
-            command: 0x0280E86A
-    - action: pana_pwr
-      then:
-        - remote_transmitter.transmit_panasonic:
-            address: 0x4004
-            command: 0x0d00bcb1
     - action: tx_panasonic
       variables:
         address: int
         command: int
       then:
-        - remote_transmitter.transmit_panasonic:
-            address: !lambda 'return address;'
-            command: !lambda 'return command;'
-    - action: tx_panasonic_x2
-      variables:
-        address: int
-        command: int
-      then:
-        - remote_transmitter.transmit_panasonic:
-            address: !lambda 'return address;'
-            command: !lambda 'return command;'
-        - delay: !lambda "return 1;"
         - remote_transmitter.transmit_panasonic:
             address: !lambda 'return address;'
             command: !lambda 'return command;'
@@ -154,10 +106,6 @@ api:
       then:
         - remote_transmitter.transmit_pronto:
             data: !lambda 'return data;'
-    - action: tx_pronto_up
-      then:
-        - remote_transmitter.transmit_pronto:
-            data: '0000 0048 0000 0018 00C0 00C0 0030 0090 0030 0090 0030 0030 0030 0090 0030 0090 0030 0030 0030 0090 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0030 0090 0030 0030 0030 0030 0030 0090 0030 0030 0030 0090 0030 0090 0030 0090 0030 0090 0030 09E6'
     - action: tx_pioneer
       variables:
         rc_code_1: int
@@ -203,6 +151,18 @@ api:
               - remote_transmitter.transmit_jvc:
                   data: !lambda 'return data;'
               - delay: !lambda "return wait;"
+    - action: tx_jvcj
+      variables:
+        data: int
+        repeat: int
+        wait: int
+      then:
+        - repeat:
+            count: !lambda 'return repeat;'
+            then:
+              - remote_transmitter.transmit_jvc:
+                  data: !lambda 'return data;'
+              - delay: !lambda "return wait;"
     - action: tx_lg
       variables:
         data: int
@@ -217,22 +177,6 @@ api:
                   data: !lambda 'return data;'
                   nbits: !lambda 'return nbits;'
               - delay: !lambda "return wait;"
-    - action: tx_nec2
-      variables:
-        address: int
-        command: int
-        cmdreps: int
-        repeat: int
-        wait: int
-      then:
-        - repeat:
-            count: !lambda 'return repeat;'
-            then:
-              - remote_transmitter.transmit_nec:
-                  address: !lambda 'return address;'
-                  command: !lambda 'return command;'
-                  command_repeats: !lambda 'return cmdreps;'
-              - delay: !lambda "return wait;"
     - action: tx_nec
       variables:
         address: int
@@ -241,20 +185,29 @@ api:
          - remote_transmitter.transmit_nec:
               address: !lambda 'return address;'
               command: !lambda 'return command;'
-    - action: tx_necrep
-      variables:
-        command: int
-        wait: int
-      then:
-          - remote_transmitter.transmit_nec:
-              address: 0xBF40
-              command: !lambda 'return command;'
-          - delay: !lambda "return wait;"
 
-remote_transmitter:
-  - id: transmitter_ir
-    pin: GPIO2
-    carrier_duty_percent: 50%
+# Allow Over-The-Air updates
+ota:
+  - platform: esphome
+    password: !secret tv_room_gw__ota_password
+
+wifi:
+  ssid: !secret wifi_ssid_iot
+  password: !secret wifi_password_iot
+  # use_address: 10.11.2.236
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "TV Room Fallback Hotspot"
+    password: !secret tv_room_gw__ap_password
+
+# In combination with the `ap` this allows the user
+# to provision wifi credentials to the device via WiFi AP.
+captive_portal:
+
+# To have a "next url" for improv serial
+web_server:
+
+debug:
 
 sensor:
   - platform: wifi_signal
@@ -263,25 +216,12 @@ sensor:
   - platform: uptime
     name: "${friendly_name} Uptime"
 
-binary_sensor:
-  - platform: remote_receiver
-    receiver_id: receiver_rf
-    internal: true
-    name: "RC6 Vol+"
-    rc6:
-      address: 9
-      command: 0x10
-    on_press:
-      - button.press: volume_up
-  - platform: remote_receiver
-    receiver_id: receiver_rf
-    internal: true
-    name: "RC6 Vol-"
-    rc6:
-      address: 9
-      command: 0x11
-    on_press:
-      - button.press: volume_down
+text_sensor:
+  - platform: debug
+    device:
+      name: "Device Info"
+    reset_reason:
+      name: "Reset Reason"
 
 button:
   # Restart the ESP
